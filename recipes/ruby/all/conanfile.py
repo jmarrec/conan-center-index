@@ -35,6 +35,10 @@ class RubyConan(ConanFile):
 
         "with_static_linked_ext": [True, False],
         "with_enable_load_relative": [True, False],
+        "with_libyaml": [True, False],
+        "with_libffi": [True, False],
+        "with_readline": [True, False],
+        "with_gmp": [True, False],
     }
     default_options = {
         "shared": False,
@@ -43,6 +47,10 @@ class RubyConan(ConanFile):
 
         "with_static_linked_ext": True,
         "with_enable_load_relative": True,
+        "with_libyaml": True,
+        "with_libffi": True,
+        "with_readline": True,
+        'with_gmp': True,
     }
     short_paths = True
 
@@ -67,9 +75,21 @@ class RubyConan(ConanFile):
 
     def requirements(self):
         self.requires("zlib/1.2.12")
-        self.requires("gmp/6.1.2")
+
         if self.options.with_openssl:
             self.requires("openssl/1.1.1o")
+
+        if self.options.with_libyaml:
+            self.requires("libyaml/0.2.5")
+
+        if self.options.with_libffi:
+            self.requires("libffi/3.4.2")
+
+        if self.options.with_readline:
+            self.requires("readline/8.1.2")
+
+        if self.options.with_gmp:
+            self.requires("gmp/6.2.1")
 
     def config_options(self):
         if self.settings.os == "Windows":
@@ -186,9 +206,19 @@ class RubyConan(ConanFile):
                 rubylib.libs = list(filter(lambda l: not l.endswith("-static"), rubylib.libs))
             else:
                 rubylib.libs = list(filter(lambda l: l.endswith("-static"), rubylib.libs))
-        rubylib.requires.extend(["zlib::zlib", "gmp::gmp"])
+        rubylib.requires.extend(["zlib::zlib"])
+        # TODO: if --with-static-linked-ext is passed, is this necessary?
+        if self.options.with_gmp:
+            rubylib.requires.append("gmp::gmp")
         if self.options.with_openssl:
             rubylib.requires.append("openssl::openssl")
+        if self.options.with_libyaml:
+            rubylib.requires.append("libyaml::libyaml")
+        if self.options.with_libffi:
+            rubylib.requires.append("libffi::libffi")
+        if self.options.with_readline:
+            rubylib.requires.append("readline::readline")
+
         if self.settings.os in ("FreeBSD", "Linux"):
             rubylib.system_libs = ["dl", "pthread", "rt", "m", "crypt"]
         elif self.settings.os == "Windows":
