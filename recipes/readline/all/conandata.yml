@@ -9,3 +9,5 @@ patches:
   "3.1.0":
     - patch_file: "patches/0001-support-windows-msvc.patch"
       base_path: "source_subfolder"
+    - patch_file: "patches/0002-Add-a-config.h-that-works-on-windows-it-builds-No-cl.patch"
+      base_path: "source_subfolder"

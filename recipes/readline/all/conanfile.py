@@ -1,6 +1,8 @@
 import os
-from conans import ConanFile, AutoToolsBuildEnvironment, tools
+from conans import ConanFile, CMake, AutoToolsBuildEnvironment, tools
 from conans.errors import ConanInvalidConfiguration
+from conan.tools.microsoft import msvc_runtime_flag, is_msvc
+from conan.tools.files import apply_conandata_patches
 
 
 class ReadLineConan(ConanFile):
@@ -27,6 +29,7 @@ class ReadLineConan(ConanFile):
         return "source_subfolder"
 
     _autotools = None
+    _cmake = None
 
     def config_options(self):
         if self.settings.os == "Windows":
@@ -43,10 +46,6 @@ class ReadLineConan(ConanFile):
             del self.options.fPIC
         del self.settings.compiler.libcxx
         del self.settings.compiler.cppstd
-
-    def validate(self):
-        if self.settings.compiler == "Visual Studio":
-            raise ConanInvalidConfiguration("readline does not support Visual Studio")
 
     def source(self):
         tools.get(**self.conan_data["sources"][self.version], destination=self._source_subfolder, strip_root=True)
@@ -77,16 +76,33 @@ class ReadLineConan(ConanFile):
         tools.replace_in_file(os.path.join(self._source_subfolder, "shlib", "Makefile.in"), "-o $@ $(SHARED_OBJ) $(SHLIB_LIBS)",
                               "-o $@ $(SHARED_OBJ) $(SHLIB_LIBS) -ltermcap")
         tools.replace_in_file(os.path.join(self._source_subfolder, "Makefile.in"), "@TERMCAP_LIB@", "-ltermcap")
+        if is_msvc(self):
+            apply_conandata_patches(self)
+
+    def _configure_cmake(self):
+        if self._cmake:
+            return self._cmake
+        self._cmake = CMake(self)
+        self._cmake.configure()
+        return self._cmake
 
     def build(self):
         self._patch_sources()
-        autotools = self._configure_autotools()
-        autotools.make()
+        if is_msvc(self):
+            cmake = self._configure_cmake()
+            cmake.build()
+        else:
+            autotools = self._configure_autotools()
+            autotools.make()
 
     def package(self):
         self.copy(pattern="COPYING", dst="licenses", src=self._source_subfolder)
-        autotools = self._configure_autotools()
-        autotools.install()
+        if is_msvc(self):
+            cmake = self._configure_cmake()
+            cmake.install()
+        else:
+            autotools = self._configure_autotools()
+            autotools.install()
 
         tools.rmdir(os.path.join(self.package_folder, "lib", "pkgconfig"))
         tools.rmdir(os.path.join(self.package_folder, "share"))
