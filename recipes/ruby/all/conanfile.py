@@ -94,8 +94,6 @@ class RubyConan(ConanFile):
     def config_options(self):
         if self.settings.os == "Windows":
             del self.options.fPIC
-            # readline isn't supported on Windows
-            del self.options.with_readline
 
     def validate(self):
         if is_msvc(self) and msvc_runtime_flag(self).startswith('MT'):
@@ -108,6 +106,9 @@ class RubyConan(ConanFile):
             del self.options.with_static_linked_ext
         del self.settings.compiler.libcxx
         del self.settings.compiler.cppstd
+        if self.settings.os == 'Windows':
+            # readline isn't supported on Windows
+            self.options.with_readline = False
 
     def source(self):
         tools.get(**self.conan_data["sources"][self.version], destination=self._source_subfolder, strip_root=True)
