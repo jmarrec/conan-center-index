@@ -193,6 +193,13 @@ class RubyConan(ConanFile):
         tools.rmdir(os.path.join(self.package_folder, "lib", "pkgconfig"))
         tools.remove_files_by_mask(os.path.join(self.package_folder, "lib"), "*.pdb")
 
+        # install the enc/*.a / ext/*.a libraries
+        if self.options.with_static_linked_ext:
+            for dirname in ['ext', 'enc']:
+                dst = os.path.join('lib', dirname)
+                self.copy('*.a', dst=dst, src=dirname, keep_path=True)
+                self.copy('*.lib', dst=dst, src=dirname, keep_path=True)
+
     def package_info(self):
         binpath = os.path.join(self.package_folder, "bin")
         self.output.info(f"Adding to PATH: {binpath}")
