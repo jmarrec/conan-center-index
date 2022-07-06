@@ -5,3 +5,7 @@ sources:
   "8.1.2":
     url: "https://ftp.gnu.org/pub/gnu/readline/readline-8.1.2.tar.gz"
     sha256: "7589a2381a8419e68654a47623ce7dfcb756815c8fee726b98f90bf668af7bc6"
+patches:
+  "3.1.0":
+    - patch_file: "patches/0001-support-windows-msvc.patch"
+      base_path: "source_subfolder"
