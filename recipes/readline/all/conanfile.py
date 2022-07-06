@@ -13,6 +13,7 @@ class ReadLineConan(ConanFile):
     homepage = "https://tiswww.case.edu/php/chet/readline/rltop.html"
     url = "https://github.com/conan-io/conan-center-index"
     settings = "os", "arch", "compiler", "build_type"
+    exports_sources = "patches/**"
     options = {
         "shared": [True, False],
         "fPIC": [True, False],
@@ -83,7 +84,7 @@ class ReadLineConan(ConanFile):
         if self._cmake:
             return self._cmake
         self._cmake = CMake(self)
-        self._cmake.configure()
+        self._cmake.configure(source_folder=self._source_subfolder)
         return self._cmake
 
     def build(self):
@@ -100,6 +101,13 @@ class ReadLineConan(ConanFile):
         if is_msvc(self):
             cmake = self._configure_cmake()
             cmake.install()
+            # Capture the headers
+            headers = ["chardefs.h", "history.h", "keymaps.h", "readline.h",
+                       "rlconf.h", "rlstdc.h", "rltypedefs.h", "tilde.h"]
+            for header in headers:
+                self.copy(pattern=header, src=self._source_subfolder,
+                          dst=os.path.join("include", "readline"))
+
         else:
             autotools = self._configure_autotools()
             autotools.install()
