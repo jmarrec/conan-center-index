@@ -31,12 +31,18 @@ class RubyConan(ConanFile):
     options = {
         "shared": [True, False],
         "fPIC": [True, False],
-        "with_openssl": [True, False]
+        "with_openssl": [True, False],
+
+        "with_static_linked_ext": [True, False],
+        "with_enable_load_relative": [True, False],
     }
     default_options = {
         "shared": False,
         "fPIC": True,
-        "with_openssl": True
+        "with_openssl": True,
+
+        "with_static_linked_ext": True,
+        "with_enable_load_relative": True,
     }
     short_paths = True
 
@@ -77,6 +83,7 @@ class RubyConan(ConanFile):
     def configure(self):
         if self.options.shared:
             del self.options.fPIC
+            del self.options.with_static_linked_ext
         del self.settings.compiler.libcxx
         del self.settings.compiler.cppstd
 
@@ -106,6 +113,12 @@ class RubyConan(ConanFile):
             tc.fpic = True
             if "--enable-shared" not in tc.configure_args:
                 tc.configure_args.append("--enable-shared")
+
+        if not self.options.shared and self.options.with_static_linked_ext:
+            tc.configure_args.append('--with-static-linked-ext')
+
+        if self.options.with_enable_load_relative:
+            tc.configure_args.append('--enable-load-relative')
 
         if cross_building(self) and is_apple_os(self.settings.os):
             apple_arch = to_apple_arch(self.settings.arch)
