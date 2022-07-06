@@ -140,6 +140,11 @@ class RubyConan(ConanFile):
         if self.options.with_enable_load_relative:
             tc.configure_args.append('--enable-load-relative')
 
+        for name, dep_cpp_info in self.deps_cpp_info.dependencies:
+            if name in ['zlib', 'openssl', 'libffi', 'libyaml', 'readline', 'gmp']:
+                root_path = tools.unix_path(dep_cpp_info.rootpath)
+                tc.configure_args.append(f'--with-{name}-dir={root_path}')
+
         if cross_building(self) and is_apple_os(self.settings.os):
             apple_arch = to_apple_arch(self.settings.arch)
             if apple_arch:
