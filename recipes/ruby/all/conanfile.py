@@ -94,6 +94,8 @@ class RubyConan(ConanFile):
     def config_options(self):
         if self.settings.os == "Windows":
             del self.options.fPIC
+            # readline isn't supported on Windows
+            del self.options.with_readline
 
     def validate(self):
         if is_msvc(self) and msvc_runtime_flag(self).startswith('MT'):
