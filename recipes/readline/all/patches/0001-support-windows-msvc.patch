@@ -1,110 +1,75 @@
-From ea68e5d15ef5aff6285ac295b07721596468d922 Mon Sep 17 00:00:00 2001
+From 808c0fb992bf8e37b55ac7c10fa642d03195b7f0 Mon Sep 17 00:00:00 2001
 From: Julien Marrec <julien.marrec@gmail.com>
-Date: Wed, 6 Jul 2022 15:50:23 +0200
-Subject: [PATCH 1/2] Patch everything this time. Didn't realize the orginal
- commit on  https://github.com/lltcggie/readline/tree/master was already
- patched
+Date: Thu, 7 Jul 2022 09:25:23 +0200
+Subject: [PATCH 1/2] support-windows-msvc
 
-Fix a couple problems on windows
 ---
- CMakeLists.txt |  56 ++++
- bind.c         |  48 ++-
- complete.c     |  96 ++++--
- display.c      | 127 ++++++--
- funmap.c       |  11 +-
- histfile.c     |  41 ++-
+ bind.c         |  52 ++--
+ callback.c     |   4 +-
+ colors.c       |   4 +-
+ compat.c       |   4 +-
+ complete.c     | 100 +++++--
+ display.c      | 131 +++++++--
+ funmap.c       |  15 +-
+ histexpand.c   |   4 +-
+ histfile.c     |  45 ++-
  histlib.h      |   2 +-
- history.h      | 112 +++----
- input.c        | 242 ++++++++++++++-
+ history.c      |   4 +-
+ history.h      | 112 ++++----
+ histsearch.c   |   4 +-
+ input.c        | 246 +++++++++++++++-
+ isearch.c      |   4 +-
+ keymaps.c      |   4 +-
  keymaps.h      |  18 +-
- nls.c          |   8 +-
- parens.c       |  30 +-
+ kill.c         |   4 +-
+ macro.c        |   4 +-
+ mbutil.c       |   4 +-
+ misc.c         |   4 +-
+ nls.c          |  12 +-
+ parens.c       |  34 ++-
+ parse-colors.c |   4 +-
  posixdir.h     |  10 +
- readline.c     |  20 +-
- readline.h     | 778 +++++++++++++++++++++++++------------------------
+ readline.c     |  24 +-
+ readline.h     | 755 +++++++++++++++++++++++++------------------------
  rldefs.h       |  38 ++-
  rlmbutil.h     |  30 +-
- rlprivate.h    | 520 ++++++++++++++++-----------------
+ rlprivate.h    | 520 +++++++++++++++++-----------------
  rlshell.h      |  12 +-
  rlstdc.h       |  26 +-
- rltty.c        | 123 +++++++-
+ rltty.c        | 127 ++++++++-
  rltty.h        |   4 +-
- shell.c        |  40 ++-
- signals.c      |  66 ++++-
- terminal.c     | 167 ++++++++++-
+ rltypedefs.h   |   4 +-
+ savestring.c   |   4 +-
+ search.c       |   4 +-
+ shell.c        |  44 ++-
+ signals.c      |  70 ++++-
+ terminal.c     | 171 +++++++++--
+ text.c         |   4 +-
  tilde.c        |  24 +-
  tilde.h        |  20 +-
- util.c         |   6 +-
- 28 files changed, 1806 insertions(+), 869 deletions(-)
- create mode 100644 CMakeLists.txt
+ undo.c         |   4 +-
+ util.c         |  10 +-
+ vi_mode.c      |   4 +-
+ xfree.c        |   4 +-
+ xmalloc.c      |   4 +-
+ 48 files changed, 1832 insertions(+), 904 deletions(-)
 
-diff --git a/CMakeLists.txt b/CMakeLists.txt
-new file mode 100644
-index 0000000..f804689
---- /dev/null
-+++ b/CMakeLists.txt
-@@ -0,0 +1,56 @@
-+cmake_minimum_required(VERSION 3.0)
-+project(readline C)
-+
-+add_definitions(-DREADLINE_LIBRARY)
-+add_definitions(-DHAVE_CONFIG_H)
-+add_definitions(-D_CRT_SECURE_NO_WARNINGS)
-+
-+if(BUILD_SHARED_LIBS)
-+    add_definitions(-DBUILD_READLINE_DLL)
-+else()
-+    add_definitions(-DREADLINE_STATIC)
-+endif()
-+
-+include_directories(
-+    ${CMAKE_CURRENT_SOURCE_DIR} # thats where the config.h is located
-+)
-+
-+add_library(readline
-+  readline.c
-+  funmap.c
-+  keymaps.c
-+  vi_mode.c
-+  parens.c
-+  rltty.c
-+  complete.c
-+  bind.c
-+  isearch.c
-+  display.c
-+  signals.c
-+  util.c
-+  kill.c
-+  undo.c
-+  macro.c
-+  input.c
-+  callback.c
-+  terminal.c
-+  xmalloc.c
-+  history.c
-+  histsearch.c
-+  histexpand.c
-+  histfile.c
-+  nls.c
-+  search.c
-+  shell.c
-+  savestring.c
-+  tilde.c
-+  text.c
-+  misc.c
-+  compat.c
-+  mbutil.c
-+  support/wcwidth.c)
-+
-+install(TARGETS readline
-+    RUNTIME DESTINATION bin
-+    LIBRARY DESTINATION lib
-+    ARCHIVE DESTINATION lib)
 diff --git a/bind.c b/bind.c
-index 7610378..23b9d3b 100644
+index 7610378..237c88c 100644
 --- a/bind.c
 +++ b/bind.c
-@@ -52,6 +52,11 @@
+@@ -19,7 +19,9 @@
+    along with Readline.  If not, see <http://www.gnu.org/licenses/>.
+ */
+ 
+-#define READLINE_LIBRARY
++#ifndef READLINE_LIBRARY
++#  define READLINE_LIBRARY
++#endif
+ 
+ #if defined (__TANDEM)
+ #  include <floss.h>
+@@ -52,6 +54,11 @@
  extern int errno;
  #endif /* !errno */
  
@@ -116,7 +81,7 @@ index 7610378..23b9d3b 100644
  #include "posixstat.h"
  
  /* System-specific feature definitions and include files. */
-@@ -65,7 +70,7 @@ extern int errno;
+@@ -65,7 +72,7 @@ extern int errno;
  #include "rlshell.h"
  #include "xmalloc.h"
  
@@ -125,7 +90,7 @@ index 7610378..23b9d3b 100644
  extern char *strchr (), *strrchr ();
  #endif /* !strchr && !__STDC__ */
  
-@@ -184,7 +189,7 @@ bind_keyseq:
+@@ -184,7 +191,7 @@ bind_keyseq:
  	  keyseq[l++] = '\\';
  	  keyseq[l++] = '\\';
  	}
@@ -134,7 +99,7 @@ index 7610378..23b9d3b 100644
  	{
  	  keyseq[l++] = '\\';
  	  keyseq[l++] = '0';
-@@ -382,7 +387,7 @@ rl_generic_bind (int type, const char *keyseq, char *data, Keymap map)
+@@ -382,7 +389,7 @@ rl_generic_bind (int type, const char *keyseq, char *data, Keymap map)
    int keys_len, prevkey, ic;
    register int i;
    KEYMAP_ENTRY k;
@@ -143,7 +108,7 @@ index 7610378..23b9d3b 100644
  
    k.function = 0;
  
-@@ -555,7 +560,7 @@ rl_translate_keyseq (const char *seq, char *array, int *len)
+@@ -555,7 +562,7 @@ rl_translate_keyseq (const char *seq, char *array, int *len)
  	      i++;
  	      has_meta = 1;
  	      continue;
@@ -152,7 +117,7 @@ index 7610378..23b9d3b 100644
  
  	  /* Translate other backslash-escaped characters.  These are the
  	     same escape sequences that bash's `echo' and `printf' builtins
-@@ -997,10 +1002,23 @@ _rl_read_init_file (const char *filename, int include_level)
+@@ -997,10 +1004,23 @@ _rl_read_init_file (const char *filename, int include_level)
    buffer = _rl_read_file (openname, &file_size);
    xfree (openname);
  
@@ -177,7 +142,7 @@ index 7610378..23b9d3b 100644
    if (include_level == 0 && filename != last_readline_init_file)
      {
        FREE (last_readline_init_file);
-@@ -1134,7 +1152,7 @@ parse_comparison_op (s, indp)
+@@ -1134,7 +1154,7 @@ parse_comparison_op (s, indp)
      }
  
    *indp = i;
@@ -186,7 +151,7 @@ index 7610378..23b9d3b 100644
  }
  
  /* **************************************************************** */
-@@ -1436,7 +1454,7 @@ parser_include (char *args)
+@@ -1436,7 +1456,7 @@ parser_include (char *args)
  
    return r;
  }
@@ -195,7 +160,7 @@ index 7610378..23b9d3b 100644
  /* Associate textual names with actual functions. */
  static const struct {
    const char * const name;
-@@ -1625,7 +1643,7 @@ rl_parse_and_bind (char *string)
+@@ -1625,7 +1645,7 @@ rl_parse_and_bind (char *string)
  	      while (e >= value && whitespace (*e))
  		e--;
  	      e++;		/* skip back to whitespace or EOS */
@@ -204,7 +169,7 @@ index 7610378..23b9d3b 100644
  	      if (*e && e >= value)
  		*e = '\0';
  	    }
-@@ -1856,7 +1874,7 @@ static const char *
+@@ -1856,7 +1876,7 @@ static const char *
  boolean_varname (int i)
  {
    return ((i >= 0) ? boolean_varlist[i].name : (char *)NULL);
@@ -213,7 +178,7 @@ index 7610378..23b9d3b 100644
  
  /* Hooks for handling special boolean variables, where a
     function needs to be called or another variable needs
-@@ -1922,13 +1940,13 @@ static const struct {
+@@ -1922,13 +1942,13 @@ static const struct {
    { "completion-prefix-display-length", V_INT,	sv_dispprefix },
    { "completion-query-items", V_INT,	sv_compquery },
    { "editing-mode",	V_STRING,	sv_editmode },
@@ -230,7 +195,7 @@ index 7610378..23b9d3b 100644
    { (char *)NULL,	0, (_rl_sv_func_t *)0 }
  };
  
-@@ -1947,7 +1965,7 @@ static const char *
+@@ -1947,7 +1967,7 @@ static const char *
  string_varname (int i)
  {
    return ((i >= 0) ? string_varlist[i].name : (char *)NULL);
@@ -239,7 +204,7 @@ index 7610378..23b9d3b 100644
  
  /* A boolean value that can appear in a `set variable' command is true if
     the value is null or empty, `on' (case-insensitive), or "1".  All other
-@@ -2647,7 +2665,7 @@ rl_invoking_keyseqs_in_map (rl_command_func_t *function, Keymap map)
+@@ -2647,7 +2667,7 @@ rl_invoking_keyseqs_in_map (rl_command_func_t *function, Keymap map)
  		    keyname[l++] = (char) c;
  		    keyname[l++] = '\0';
  		  }
@@ -248,7 +213,7 @@ index 7610378..23b9d3b 100644
  		strcat (keyname, seqs[i]);
  		xfree (seqs[i]);
  
-@@ -2903,7 +2921,7 @@ _rl_get_string_variable_value (const char *name)
+@@ -2903,7 +2923,7 @@ _rl_get_string_variable_value (const char *name)
      }
    else if (_rl_stricmp (name, "keyseq-timeout") == 0)
      {
@@ -257,11 +222,67 @@ index 7610378..23b9d3b 100644
        return (numbuf);
      }
    else if (_rl_stricmp (name, "emacs-mode-string") == 0)
+diff --git a/callback.c b/callback.c
+index a466cf9..9b04f17 100644
+--- a/callback.c
++++ b/callback.c
+@@ -19,7 +19,9 @@
+    along with Readline.  If not, see <http://www.gnu.org/licenses/>.
+ */
+ 
+-#define READLINE_LIBRARY
++#ifndef READLINE_LIBRARY
++#  define READLINE_LIBRARY
++#endif
+ 
+ #if defined (HAVE_CONFIG_H)
+ #  include <config.h>
+diff --git a/colors.c b/colors.c
+index 9e37527..f4992b8 100644
+--- a/colors.c
++++ b/colors.c
+@@ -24,7 +24,9 @@
+    Flaherty <dennisf@denix.elk.miles.com> based on original patches by
+    Greg Lee <lee@uhunix.uhcc.hawaii.edu>.  */
+ 
+-#define READLINE_LIBRARY
++#ifndef READLINE_LIBRARY
++#  define READLINE_LIBRARY
++#endif
+ 
+ #if defined (HAVE_CONFIG_H)
+ #  include <config.h>
+diff --git a/compat.c b/compat.c
+index 3ade362..45cfdca 100644
+--- a/compat.c
++++ b/compat.c
+@@ -19,7 +19,9 @@
+    along with Readline.  If not, see <http://www.gnu.org/licenses/>.
+ */
+ 
+-#define READLINE_LIBRARY
++#ifndef READLINE_LIBRARY
++#  define READLINE_LIBRARY
++#endif
+ 
+ #if defined (HAVE_CONFIG_H)
+ #  include <config.h>
 diff --git a/complete.c b/complete.c
-index fc5c3ad..569572f 100644
+index fc5c3ad..f12c2fe 100644
 --- a/complete.c
 +++ b/complete.c
-@@ -52,12 +52,17 @@
+@@ -19,7 +19,9 @@
+    along with Readline.  If not, see <http://www.gnu.org/licenses/>.
+ */
+ 
+-#define READLINE_LIBRARY
++#ifndef READLINE_LIBRARY
++#  define READLINE_LIBRARY
++#endif
+ 
+ #if defined (__TANDEM)
+ #  define _XOPEN_SOURCE_EXTENDED 1
+@@ -52,12 +54,17 @@
  
  #include <stdio.h>
  
@@ -280,7 +301,7 @@ index fc5c3ad..569572f 100644
  #include <pwd.h>
  #endif
  
-@@ -77,7 +82,7 @@ extern int errno;
+@@ -77,7 +84,7 @@ extern int errno;
  #  include "colors.h"
  #endif
  
@@ -289,7 +310,7 @@ index fc5c3ad..569572f 100644
  typedef int QSFUNC (const void *, const void *);
  #else
  typedef int QSFUNC ();
-@@ -356,7 +361,7 @@ rl_compignore_func_t *rl_ignore_some_completions_function = (rl_compignore_func_
+@@ -356,7 +363,7 @@ rl_compignore_func_t *rl_ignore_some_completions_function = (rl_compignore_func_
     and a pointer to the quoting character to be used, which the function can
     reset if desired. */
  rl_quote_func_t *rl_filename_quoting_function = rl_quote_filename;
@@ -298,7 +319,7 @@ index fc5c3ad..569572f 100644
  /* Function to call to remove quoting characters from a filename.  Called
     before completion is attempted, so the embedded quotes do not interfere
     with matching names in the file system.  Readline doesn't do anything
-@@ -619,7 +624,7 @@ stat_char (char *filename)
+@@ -619,7 +626,7 @@ stat_char (char *filename)
      }
    else
      fn = filename;
@@ -307,7 +328,7 @@ index fc5c3ad..569572f 100644
  #if defined (HAVE_LSTAT) && defined (S_ISLNK)
    r = lstat (fn, &finfo);
  #else
-@@ -1136,7 +1141,7 @@ _rl_find_completion_word (int *fp, int *dp)
+@@ -1136,7 +1143,7 @@ _rl_find_completion_word (int *fp, int *dp)
  	      else if (quote_char == '"')
  		found_quote |= RL_QF_DOUBLE_QUOTE;
  	      else
@@ -316,7 +337,7 @@ index fc5c3ad..569572f 100644
  	    }
  	}
      }
-@@ -1245,7 +1250,7 @@ gen_completion_matches (char *text, int start, int end, rl_compentry_func_t *our
+@@ -1245,7 +1252,7 @@ gen_completion_matches (char *text, int start, int end, rl_compentry_func_t *our
        matches = 0;
        RL_CHECK_SIGNALS ();
      }
@@ -325,7 +346,7 @@ index fc5c3ad..569572f 100644
  }
  
  /* Filter out duplicates in MATCHES.  This frees up the strings in
-@@ -1724,7 +1729,7 @@ display_matches (char **matches)
+@@ -1724,7 +1731,7 @@ display_matches (char **matches)
        (*rl_completion_display_matches_hook) (matches, len, max);
        return;
      }
@@ -334,7 +355,7 @@ index fc5c3ad..569572f 100644
    /* If there are many items, then ask the user if she really wants to
       see them all. */
    if (rl_completion_query_items > 0 && len >= rl_completion_query_items)
-@@ -1974,14 +1979,14 @@ compare_match (char *text, const char *match)
+@@ -1974,14 +1981,14 @@ compare_match (char *text, const char *match)
    char *temp;
    int r;
  
@@ -351,7 +372,7 @@ index fc5c3ad..569572f 100644
    return (strcmp (text, match));
  }
  
-@@ -2129,7 +2134,7 @@ rl_complete_internal (int what_to_do)
+@@ -2129,7 +2136,7 @@ rl_complete_internal (int what_to_do)
  	  append_to_match (matches[0], delimiter, quote_char, nontrivial_lcd);
  	  break;
  	}
@@ -360,7 +381,7 @@ index fc5c3ad..569572f 100644
        if (rl_completion_display_matches_hook == 0)
  	{
  	  _rl_sigcleanup = _rl_complete_sigcleanup;
-@@ -2267,7 +2272,12 @@ rl_username_completion_function (const char *text, int state)
+@@ -2267,7 +2274,12 @@ rl_username_completion_function (const char *text, int state)
    return (char *)NULL;
  #else /* !__WIN32__ && !__OPENNT) */
    static char *username = (char *)NULL;
@@ -373,7 +394,7 @@ index fc5c3ad..569572f 100644
    static int namelen, first_char, first_char_loc;
    char *value;
  
-@@ -2280,11 +2290,11 @@ rl_username_completion_function (const char *text, int state)
+@@ -2280,11 +2292,11 @@ rl_username_completion_function (const char *text, int state)
  
        username = savestring (&text[first_char_loc]);
        namelen = strlen (username);
@@ -387,7 +408,7 @@ index fc5c3ad..569572f 100644
  #if defined (HAVE_GETPWENT)
    while (entry = getpwent ())
      {
-@@ -2314,6 +2324,21 @@ rl_username_completion_function (const char *text, int state)
+@@ -2314,6 +2326,21 @@ rl_username_completion_function (const char *text, int state)
  
        return (value);
      }
@@ -409,7 +430,7 @@ index fc5c3ad..569572f 100644
  #endif /* !__WIN32__ && !__OPENNT */
  }
  
-@@ -2453,7 +2478,16 @@ complete_fncmp (const char *convfn, int convlen, const char *filename, int filen
+@@ -2453,7 +2480,16 @@ complete_fncmp (const char *convfn, int convlen, const char *filename, int filen
  char *
  rl_filename_completion_function (const char *text, int state)
  {
@@ -426,7 +447,7 @@ index fc5c3ad..569572f 100644
    static char *filename = (char *)NULL;
    static char *dirname = (char *)NULL;
    static char *users_dirname = (char *)NULL;
-@@ -2461,7 +2495,6 @@ rl_filename_completion_function (const char *text, int state)
+@@ -2461,7 +2497,6 @@ rl_filename_completion_function (const char *text, int state)
    char *temp, *dentry, *convfn;
    int dirlen, dentlen, convlen;
    int tilde_dirname;
@@ -434,7 +455,7 @@ index fc5c3ad..569572f 100644
  
    /* If we don't have any state, then do some initialization. */
    if (state == 0)
-@@ -2549,8 +2582,17 @@ rl_filename_completion_function (const char *text, int state)
+@@ -2549,8 +2584,17 @@ rl_filename_completion_function (const char *text, int state)
  	  xfree (dirname);
  	  dirname = savestring (users_dirname);
  	}
@@ -453,7 +474,7 @@ index fc5c3ad..569572f 100644
        /* Now dequote a non-null filename.  FILENAME will not be NULL, but may
  	 be empty. */
        if (*filename && rl_completion_found_quote && rl_filename_dequoting_function)
-@@ -2573,12 +2615,15 @@ rl_filename_completion_function (const char *text, int state)
+@@ -2573,12 +2617,15 @@ rl_filename_completion_function (const char *text, int state)
  
    /* Now that we have some state, we can read the directory. */
  
@@ -471,7 +492,7 @@ index fc5c3ad..569572f 100644
        if (rl_filename_rewrite_hook)
  	{
  	  convfn = (*rl_filename_rewrite_hook) (dentry, dentlen);
-@@ -2602,9 +2647,16 @@ rl_filename_completion_function (const char *text, int state)
+@@ -2602,9 +2649,16 @@ rl_filename_completion_function (const char *text, int state)
  	  if (complete_fncmp (convfn, convlen, filename, filename_len))
  	    break;
  	}
@@ -488,7 +509,7 @@ index fc5c3ad..569572f 100644
      {
        if (directory)
  	{
-@@ -2662,6 +2714,10 @@ rl_filename_completion_function (const char *text, int state)
+@@ -2662,6 +2716,10 @@ rl_filename_completion_function (const char *text, int state)
        else
  	temp = savestring (convfn);
  
@@ -499,7 +520,7 @@ index fc5c3ad..569572f 100644
        if (convfn != dentry)
  	xfree (convfn);
  
-@@ -2766,7 +2822,7 @@ rl_old_menu_complete (int count, int invoking_key)
+@@ -2766,7 +2824,7 @@ rl_old_menu_complete (int count, int invoking_key)
       rl_line_buffer[orig_start] and rl_line_buffer[rl_point] with
       matches[match_list_index], and add any necessary closing char. */
  
@@ -508,7 +529,7 @@ index fc5c3ad..569572f 100644
      {
        rl_ding ();
        FREE (matches);
-@@ -2808,7 +2864,7 @@ rl_old_menu_complete (int count, int invoking_key)
+@@ -2808,7 +2866,7 @@ rl_old_menu_complete (int count, int invoking_key)
  3. It displays the common prefix if there is one, and makes it the first menu
     choice if the menu-complete-display-prefix option is enabled
  */
@@ -517,7 +538,7 @@ index fc5c3ad..569572f 100644
  int
  rl_menu_complete (int count, int ignore)
  {
-@@ -2891,7 +2947,7 @@ rl_menu_complete (int count, int ignore)
+@@ -2891,7 +2949,7 @@ rl_menu_complete (int count, int ignore)
        for (match_list_size = 0; matches[match_list_size]; match_list_size++)
          ;
  
@@ -526,7 +547,7 @@ index fc5c3ad..569572f 100644
  	{
  	  rl_ding ();
  	  FREE (matches);
-@@ -2947,7 +3003,7 @@ rl_menu_complete (int count, int ignore)
+@@ -2947,7 +3005,7 @@ rl_menu_complete (int count, int ignore)
       rl_line_buffer[orig_start] and rl_line_buffer[rl_point] with
       matches[match_list_index], and add any necessary closing char. */
  
@@ -536,7 +557,7 @@ index fc5c3ad..569572f 100644
        rl_ding ();
        FREE (matches);
 diff --git a/display.c b/display.c
-index f5d3294..d678bbb 100644
+index f5d3294..add342f 100644
 --- a/display.c
 +++ b/display.c
 @@ -2,7 +2,7 @@
@@ -548,7 +569,18 @@ index f5d3294..d678bbb 100644
     for reading lines of text with interactive input and history editing.
  
     Readline is free software: you can redistribute it and/or modify
-@@ -59,7 +59,15 @@
+@@ -19,7 +19,9 @@
+    along with Readline.  If not, see <http://www.gnu.org/licenses/>.
+ */
+ 
+-#define READLINE_LIBRARY
++#ifndef READLINE_LIBRARY
++#  define READLINE_LIBRARY
++#endif
+ 
+ #if defined (HAVE_CONFIG_H)
+ #  include <config.h>
+@@ -59,7 +61,15 @@
  #include "rlprivate.h"
  #include "xmalloc.h"
  
@@ -565,7 +597,7 @@ index f5d3294..d678bbb 100644
  extern char *strchr (), *strrchr ();
  #endif /* !strchr && !__STDC__ */
  
-@@ -76,6 +84,12 @@ static void cr PARAMS((void));
+@@ -76,6 +86,12 @@ static void cr PARAMS((void));
  static void redraw_prompt PARAMS((char *));
  static void _rl_move_cursor_relative PARAMS((int, const char *, const char *));
  
@@ -578,7 +610,7 @@ index f5d3294..d678bbb 100644
  /* Values for FLAGS */
  #define PMT_MULTILINE	0x01
  
-@@ -137,7 +151,7 @@ static int _rl_col_width PARAMS((const char *, int, int, int));
+@@ -137,7 +153,7 @@ static int _rl_col_width PARAMS((const char *, int, int, int));
  #define FACE_NORMAL	'0'
  #define FACE_STANDOUT	'1'
  #define FACE_INVALID	((char)1)
@@ -587,7 +619,7 @@ index f5d3294..d678bbb 100644
  /* **************************************************************** */
  /*								    */
  /*			Display stuff				    */
-@@ -342,7 +356,7 @@ prompt_modestr (int *lenp)
+@@ -342,7 +358,7 @@ prompt_modestr (int *lenp)
  	\002 (^B) end non-visible characters
     all characters except \001 and \002 (following a \001) are copied to
     the returned string; all characters except those between \001 and
@@ -596,7 +628,7 @@ index f5d3294..d678bbb 100644
  
  /* Possible values for FLAGS:
  	PMT_MULTILINE	caller indicates that this is part of a multiline prompt
-@@ -641,7 +655,7 @@ realloc_line (int minsize)
+@@ -641,7 +657,7 @@ realloc_line (int minsize)
    invisible_line = (char *)xrealloc (invisible_line, newsize);
    inv_face = (char *)xrealloc (inv_face, newsize);
  
@@ -605,7 +637,7 @@ index f5d3294..d678bbb 100644
    memset (visible_line + line_size, 0, delta);
    memset (vis_face + line_size, FACE_NORMAL, delta);
    memset (invisible_line + line_size, 1, delta);
-@@ -663,7 +677,7 @@ init_line_structures (int minsize)
+@@ -663,7 +679,7 @@ init_line_structures (int minsize)
        if (line_size > minsize)
  	minsize = line_size;
      }
@@ -614,7 +646,7 @@ index f5d3294..d678bbb 100644
  
    if (vis_lbreaks == 0)
      {
-@@ -735,7 +749,7 @@ _rl_optimize_redisplay (void)
+@@ -735,7 +751,7 @@ _rl_optimize_redisplay (void)
  {
    if (_rl_vis_botlin == 0)
      _rl_quick_redisplay = 1;
@@ -623,7 +655,7 @@ index f5d3294..d678bbb 100644
  
  /* Basic redisplay algorithm.  See comments inline. */
  void
-@@ -761,7 +775,7 @@ rl_redisplay (void)
+@@ -761,7 +777,7 @@ rl_redisplay (void)
  
    /* Block keyboard interrupts because this function manipulates global
       data structures. */
@@ -632,7 +664,7 @@ index f5d3294..d678bbb 100644
    RL_SETSTATE (RL_STATE_REDISPLAYING);
  
    cur_face = FACE_NORMAL;
-@@ -887,7 +901,7 @@ rl_redisplay (void)
+@@ -887,7 +903,7 @@ rl_redisplay (void)
        } while (0)
  #endif /* !HANDLE_MULTIBYTE */
  
@@ -641,7 +673,7 @@ index f5d3294..d678bbb 100644
  #define CHECK_LPOS() \
        do { \
  	lpos++; \
-@@ -958,7 +972,7 @@ rl_redisplay (void)
+@@ -958,7 +974,7 @@ rl_redisplay (void)
  	{
  	  temp = local_prompt_newlines[newlines+1];
  	  inv_lbreaks[++newlines] = temp;
@@ -650,7 +682,7 @@ index f5d3294..d678bbb 100644
  
        /* Now set lpos from the last newline */
        if (mb_cur_max > 1 && rl_byte_oriented == 0 && prompt_multibyte_chars > 0)
-@@ -1043,7 +1057,7 @@ rl_redisplay (void)
+@@ -1043,7 +1059,7 @@ rl_redisplay (void)
  	      int olen;
  
  	      olen = sprintf (obuf, "\\%o", c);
@@ -659,7 +691,7 @@ index f5d3294..d678bbb 100644
  	      if (lpos + olen >= _rl_screenwidth)
  		{
  		  temp = _rl_screenwidth - lpos;
-@@ -1295,7 +1309,7 @@ rl_redisplay (void)
+@@ -1295,7 +1311,7 @@ rl_redisplay (void)
  			_rl_last_c_pos != o_cpos &&
  			_rl_last_c_pos > (prompt_last_invisible - _rl_screenwidth - prompt_invis_chars_first_line))	/* XXX - rethink this last one */
  		/* This assumes that all the invisible characters are split
@@ -668,7 +700,7 @@ index f5d3294..d678bbb 100644
  		   prompt consumes more than two lines. It's usually right */
  		/* XXX - not sure this is ever executed */
  		_rl_last_c_pos -= (wrap_offset-prompt_invis_chars_first_line);
-@@ -1896,7 +1910,7 @@ update_line (char *old, char *old_face, char *new, char *new_face, int current_l
+@@ -1896,7 +1912,7 @@ update_line (char *old, char *old_face, char *new, char *new_face, int current_l
  	  nfdf = new_face + temp;
  	}
        else
@@ -677,7 +709,7 @@ index f5d3294..d678bbb 100644
  	  memset (&ps_new, 0, sizeof(mbstate_t));
  	  memset (&ps_old, 0, sizeof(mbstate_t));
  
-@@ -2286,7 +2300,7 @@ dumb_update:
+@@ -2286,7 +2302,7 @@ dumb_update:
       a bitmap that indicates which characters are visible and which are
       invisible. We fix it up (imperfectly) in the caller and by trying to use
       the entire prompt string wherever we can. */
@@ -686,7 +718,7 @@ index f5d3294..d678bbb 100644
    /* If we are changing the number of invisible characters in a line, and
       the spot of first difference is before the end of the invisible chars,
       lendiff needs to be adjusted. */
-@@ -2321,6 +2335,7 @@ dumb_update:
+@@ -2321,6 +2337,7 @@ dumb_update:
    /* col_lendiff > 0 if we are adding characters to the line */
    if (col_lendiff > 0)	/* XXX - was lendiff */
      {
@@ -694,7 +726,7 @@ index f5d3294..d678bbb 100644
        /* Non-zero if we're increasing the number of lines. */
        int gl = current_line >= _rl_vis_botlin && inv_botlin > _rl_vis_botlin;
  
-@@ -2402,6 +2417,7 @@ dumb_update:
+@@ -2402,6 +2419,7 @@ dumb_update:
  	    }
  	}
        else
@@ -702,7 +734,7 @@ index f5d3294..d678bbb 100644
  	{
  	  /* cannot insert chars, write to EOL */
  	  puts_face (nfd, nfdf, temp);
-@@ -2428,6 +2444,7 @@ dumb_update:
+@@ -2428,6 +2446,7 @@ dumb_update:
      }
    else				/* Delete characters from line. */
      {
@@ -710,7 +742,7 @@ index f5d3294..d678bbb 100644
        /* If possible and inexpensive to use terminal deletion, then do so. */
        if (_rl_term_dc && (2 * col_temp) >= -col_lendiff)
  	{
-@@ -2499,6 +2516,7 @@ dumb_update:
+@@ -2499,6 +2518,7 @@ dumb_update:
  	}
        /* Otherwise, print over the existing material. */
        else
@@ -718,7 +750,7 @@ index f5d3294..d678bbb 100644
  	{
  	  if (temp > 0)
  	    {
-@@ -2530,7 +2548,7 @@ clear_rest_of_line:
+@@ -2530,7 +2550,7 @@ clear_rest_of_line:
  	     adjust col_lendiff based on the difference between _rl_last_c_pos
  	     and _rl_screenwidth */
  	  if (col_lendiff && ((mb_cur_max == 1 || rl_byte_oriented) || (_rl_last_c_pos < _rl_screenwidth)))
@@ -727,7 +759,7 @@ index f5d3294..d678bbb 100644
  	      if (_rl_term_autowrap && current_line < inv_botlin)
  		space_to_eol (col_lendiff);
  	      else
-@@ -2679,6 +2697,16 @@ rl_redraw_prompt_last_line (void)
+@@ -2679,6 +2699,16 @@ rl_redraw_prompt_last_line (void)
  static void
  _rl_move_cursor_relative (int new, const char *data, const char *dataf)
  {
@@ -744,7 +776,7 @@ index f5d3294..d678bbb 100644
    register int i;
    int woff;			/* number of invisible chars on current line */
    int cpos, dpos;		/* current and desired cursor positions */
-@@ -2824,12 +2852,23 @@ _rl_move_cursor_relative (int new, const char *data, const char *dataf)
+@@ -2824,12 +2854,23 @@ _rl_move_cursor_relative (int new, const char *data, const char *dataf)
      _rl_backspace (cpos - dpos);
  
    _rl_last_c_pos = dpos;
@@ -768,7 +800,7 @@ index f5d3294..d678bbb 100644
    register int delta, i;
  
    if (_rl_last_v_pos == to || to > _rl_screenheight)
-@@ -2859,6 +2898,7 @@ _rl_move_vert (int to)
+@@ -2859,6 +2900,7 @@ _rl_move_vert (int to)
      }
  
    _rl_last_v_pos = to;		/* Now TO is here */
@@ -776,7 +808,7 @@ index f5d3294..d678bbb 100644
  }
  
  /* Physically print C on rl_outstream.  This is for functions which know
-@@ -3019,7 +3059,7 @@ rl_message (format, arg1, arg2)
+@@ -3019,7 +3061,7 @@ rl_message (format, arg1, arg2)
    local_prompt_prefix = (char *)NULL;
    local_prompt_len = local_prompt ? strlen (local_prompt) : 0;
    (*rl_redisplay_function) ();
@@ -785,7 +817,7 @@ index f5d3294..d678bbb 100644
    return 0;
  }
  #endif /* !USE_VARARGS */
-@@ -3129,7 +3169,7 @@ _rl_make_prompt_for_search (int pchar)
+@@ -3129,7 +3171,7 @@ _rl_make_prompt_for_search (int pchar)
  	strcpy (pmt, p);
        pmt[len] = pchar;
        pmt[len+1] = '\0';
@@ -794,7 +826,7 @@ index f5d3294..d678bbb 100644
  
    /* will be overwritten by expand_prompt, called from rl_message */
    prompt_physical_chars = saved_physical_chars + 1;
-@@ -3157,13 +3197,30 @@ _rl_erase_at_end_of_line (int l)
+@@ -3157,13 +3199,30 @@ _rl_erase_at_end_of_line (int l)
  void
  _rl_clear_to_eol (int count)
  {
@@ -827,7 +859,7 @@ index f5d3294..d678bbb 100644
  }
  
  /* Clear to the end of the line using spaces.  COUNT is the minimum
-@@ -3171,12 +3228,16 @@ _rl_clear_to_eol (int count)
+@@ -3171,12 +3230,16 @@ _rl_clear_to_eol (int count)
  static void
  space_to_eol (int count)
  {
@@ -844,7 +876,7 @@ index f5d3294..d678bbb 100644
  }
  
  void
-@@ -3186,6 +3247,7 @@ _rl_clear_screen (int clrscr)
+@@ -3186,6 +3249,7 @@ _rl_clear_screen (int clrscr)
    ScreenClear ();
    ScreenSetCursor (0, 0);
  #else
@@ -852,7 +884,7 @@ index f5d3294..d678bbb 100644
    if (_rl_term_clrpag)
      {
        tputs (_rl_term_clrpag, 1, _rl_output_character_function);
-@@ -3193,7 +3255,9 @@ _rl_clear_screen (int clrscr)
+@@ -3193,7 +3257,9 @@ _rl_clear_screen (int clrscr)
  	tputs (_rl_term_clrscroll, 1, _rl_output_character_function);
      }
    else
@@ -862,7 +894,7 @@ index f5d3294..d678bbb 100644
  #endif /* __DJGPP__ */
  }
  
-@@ -3211,7 +3275,7 @@ insert_some_chars (char *string, int count, int col)
+@@ -3211,7 +3277,7 @@ insert_some_chars (char *string, int count, int col)
  static void
  open_some_spaces (int col)
  {
@@ -871,7 +903,7 @@ index f5d3294..d678bbb 100644
    char *buffer;
    register int i;
  
-@@ -3240,7 +3304,7 @@ open_some_spaces (int col)
+@@ -3240,7 +3306,7 @@ open_some_spaces (int col)
        for (i = col; i--; )
  	tputs (_rl_term_ic, 1, _rl_output_character_function);
      }
@@ -880,7 +912,7 @@ index f5d3294..d678bbb 100644
  }
  
  /* Delete COUNT characters from the display line. */
-@@ -3250,7 +3314,7 @@ delete_chars (int count)
+@@ -3250,7 +3316,7 @@ delete_chars (int count)
    if (count > _rl_screenwidth)	/* XXX */
      return;
  
@@ -889,7 +921,7 @@ index f5d3294..d678bbb 100644
    if (_rl_term_DC && *_rl_term_DC)
      {
        char *buffer;
-@@ -3263,7 +3327,7 @@ delete_chars (int count)
+@@ -3263,7 +3329,7 @@ delete_chars (int count)
  	while (count--)
  	  tputs (_rl_term_dc, 1, _rl_output_character_function);
      }
@@ -898,7 +930,7 @@ index f5d3294..d678bbb 100644
  }
  
  void
-@@ -3315,8 +3379,12 @@ _rl_update_final (void)
+@@ -3315,8 +3381,12 @@ _rl_update_final (void)
  static void
  cr (void)
  {
@@ -911,7 +943,7 @@ index f5d3294..d678bbb 100644
  }
  
  /* Redraw the last line of a multi-line prompt that may possibly contain
-@@ -3344,7 +3412,7 @@ redraw_prompt (char *t)
+@@ -3344,7 +3414,7 @@ redraw_prompt (char *t)
    rl_display_prompt = oldp;
    rl_restore_prompt();
  }
@@ -920,7 +952,7 @@ index f5d3294..d678bbb 100644
  /* Redisplay the current line after a SIGWINCH is received. */
  void
  _rl_redisplay_after_sigwinch (void)
-@@ -3357,21 +3425,28 @@ _rl_redisplay_after_sigwinch (void)
+@@ -3357,21 +3427,28 @@ _rl_redisplay_after_sigwinch (void)
       screen line. */
    if (_rl_term_cr)
      {
@@ -952,7 +984,7 @@ index f5d3294..d678bbb 100644
  	_rl_move_vert (0);
      }
 diff --git a/funmap.c b/funmap.c
-index eca49a3..cfdebc7 100644
+index eca49a3..f99879a 100644
 --- a/funmap.c
 +++ b/funmap.c
 @@ -3,7 +3,7 @@
@@ -964,7 +996,18 @@ index eca49a3..cfdebc7 100644
  
     Readline is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
-@@ -40,13 +40,13 @@
+@@ -19,7 +19,9 @@
+    along with Readline.  If not, see <http://www.gnu.org/licenses/>.
+ */
+ 
+-#define READLINE_LIBRARY
++#ifndef READLINE_LIBRARY
++#  define READLINE_LIBRARY
++#endif
+ 
+ #if defined (HAVE_CONFIG_H)
+ #  include <config.h>
+@@ -40,13 +42,13 @@
  
  #include "xmalloc.h"
  
@@ -980,7 +1023,7 @@ index eca49a3..cfdebc7 100644
  
  FUNMAP **funmap;
  static int funmap_size;
-@@ -56,6 +56,9 @@ static int funmap_entry;
+@@ -56,6 +58,9 @@ static int funmap_entry;
     program specific function. */
  int funmap_program_specific_entry_start;
  
@@ -990,7 +1033,7 @@ index eca49a3..cfdebc7 100644
  static const FUNMAP default_funmap[] = {
    { "abort", rl_abort },
    { "accept-line", rl_newline },
-@@ -215,7 +218,7 @@ rl_add_funmap_entry (const char *name, rl_command_func_t *function)
+@@ -215,7 +220,7 @@ rl_add_funmap_entry (const char *name, rl_command_func_t *function)
        funmap_size += 64;
        funmap = (FUNMAP **)xrealloc (funmap, funmap_size * sizeof (FUNMAP *));
      }
@@ -999,11 +1042,37 @@ index eca49a3..cfdebc7 100644
    funmap[funmap_entry] = (FUNMAP *)xmalloc (sizeof (FUNMAP));
    funmap[funmap_entry]->name = name;
    funmap[funmap_entry]->function = function;
+diff --git a/histexpand.c b/histexpand.c
+index b986dba..5263d02 100644
+--- a/histexpand.c
++++ b/histexpand.c
+@@ -19,7 +19,9 @@
+    along with History.  If not, see <http://www.gnu.org/licenses/>.
+ */
+ 
+-#define READLINE_LIBRARY
++#ifndef READLINE_LIBRARY
++#  define READLINE_LIBRARY
++#endif
+ 
+ #if defined (HAVE_CONFIG_H)
+ #  include <config.h>
 diff --git a/histfile.c b/histfile.c
-index f0fa5ce..160e97d 100644
+index f0fa5ce..356bbc9 100644
 --- a/histfile.c
 +++ b/histfile.c
-@@ -60,7 +60,7 @@
+@@ -23,7 +23,9 @@
+    don't have to know what data types are used, just what functions
+    you can call.  I think I have done that. */
+ 
+-#define READLINE_LIBRARY
++#ifndef READLINE_LIBRARY
++#  define READLINE_LIBRARY
++#endif
+ 
+ #if defined (__TANDEM)
+ #  define _XOPEN_SOURCE_EXTENDED 1
+@@ -60,7 +62,7 @@
  
  #include <ctype.h>
  
@@ -1012,7 +1081,7 @@ index f0fa5ce..160e97d 100644
  #  undef HAVE_MMAP
  #endif
  
-@@ -84,20 +84,21 @@
+@@ -84,20 +86,21 @@
  #if defined(_WIN32)
  #  define WIN32_LEAN_AND_MEAN
  #  include <windows.h>
@@ -1037,7 +1106,7 @@ index f0fa5ce..160e97d 100644
  
  #include <errno.h>
  #if !defined (errno)
-@@ -147,6 +148,10 @@ static int histfile_backup PARAMS((const char *, const char *));
+@@ -147,6 +150,10 @@ static int histfile_backup PARAMS((const char *, const char *));
  static int histfile_restore PARAMS((const char *, const char *));
  static int history_rename PARAMS((const char *, const char *));
  
@@ -1048,7 +1117,7 @@ index f0fa5ce..160e97d 100644
  /* Return the string that should be used in the place of this
     filename.  This only matters when you don't specify the
     filename to read_history (), or write_history (). */
-@@ -161,11 +166,19 @@ history_filename (const char *filename)
+@@ -161,11 +168,19 @@ history_filename (const char *filename)
  
    if (return_val)
      return (return_val);
@@ -1070,7 +1139,7 @@ index f0fa5ce..160e97d 100644
  #endif
  
    if (home == 0)
-@@ -194,7 +207,7 @@ history_backupfile (const char *filename)
+@@ -194,7 +209,7 @@ history_backupfile (const char *filename)
    ssize_t n;
    struct stat fs;
  
@@ -1079,7 +1148,7 @@ index f0fa5ce..160e97d 100644
  #if defined (HAVE_READLINK)
    /* Follow symlink to avoid backing up symlink itself; call will fail if
       not a symlink */
-@@ -204,7 +217,7 @@ history_backupfile (const char *filename)
+@@ -204,7 +219,7 @@ history_backupfile (const char *filename)
        fn = linkbuf;
      }
  #endif
@@ -1088,7 +1157,7 @@ index f0fa5ce..160e97d 100644
    len = strlen (fn);
    ret = xmalloc (len + 2);
    strcpy (ret, fn);
-@@ -212,7 +225,7 @@ history_backupfile (const char *filename)
+@@ -212,7 +227,7 @@ history_backupfile (const char *filename)
    ret[len+1] = '\0';
    return ret;
  }
@@ -1097,7 +1166,7 @@ index f0fa5ce..160e97d 100644
  static char *
  history_tempfile (const char *filename)
  {
-@@ -223,7 +236,7 @@ history_tempfile (const char *filename)
+@@ -223,7 +238,7 @@ history_tempfile (const char *filename)
    struct stat fs;
    int pid;
  
@@ -1106,7 +1175,7 @@ index f0fa5ce..160e97d 100644
  #if defined (HAVE_READLINK)
    /* Follow symlink so tempfile created in the same directory as any symlinked
       history file; call will fail if not a symlink */
-@@ -233,7 +246,7 @@ history_tempfile (const char *filename)
+@@ -233,7 +248,7 @@ history_tempfile (const char *filename)
        fn = linkbuf;
      }
  #endif
@@ -1115,7 +1184,7 @@ index f0fa5ce..160e97d 100644
    len = strlen (fn);
    ret = xmalloc (len + 11);
    strcpy (ret, fn);
-@@ -251,7 +264,7 @@ history_tempfile (const char *filename)
+@@ -251,7 +266,7 @@ history_tempfile (const char *filename)
  
    return ret;
  }
@@ -1124,7 +1193,7 @@ index f0fa5ce..160e97d 100644
  /* Add the contents of FILENAME to the history list, a line at a time.
     If FILENAME is NULL, then read from ~/.history.  Returns 0 if
     successful, or errno if not. */
-@@ -512,7 +525,7 @@ histfile_restore (const char *backup, const char *orig)
+@@ -512,7 +527,7 @@ histfile_restore (const char *backup, const char *orig)
  
  #define SHOULD_CHOWN(finfo, nfinfo) \
    (finfo.st_uid != nfinfo.st_uid || finfo.st_gid != nfinfo.st_gid)
@@ -1133,7 +1202,7 @@ index f0fa5ce..160e97d 100644
  /* Truncate the history file FNAME, leaving only LINES trailing lines.
     If FNAME is NULL, then use ~/.history.  Writes a new file and renames
     it to the original name.  Returns 0 on success, errno on failure. */
-@@ -749,7 +762,7 @@ mmap_error:
+@@ -749,7 +764,7 @@ mmap_error:
  	FREE (tempname);
  	return rv;
        }
@@ -1155,6 +1224,21 @@ index 9627b24..43ca05e 100644
  extern char *strchr ();
  #  endif /* !strchr && !__STDC__ */
  #define member(c, s) ((c) ? ((char *)strchr ((s), (c)) != (char *)NULL) : 0)
+diff --git a/history.c b/history.c
+index 67158b1..d92ebda 100644
+--- a/history.c
++++ b/history.c
+@@ -22,7 +22,9 @@
+ /* The goal is to make the implementation transparent, so that you
+    don't have to know what data types are used, just what functions
+    you can call.  I think I have done that. */
+-#define READLINE_LIBRARY
++#ifndef READLINE_LIBRARY
++#  define READLINE_LIBRARY
++#endif
+ 
+ #if defined (HAVE_CONFIG_H)
+ #  include <config.h>
 diff --git a/history.h b/history.h
 index cc3de29..2968f7c 100644
 --- a/history.h
@@ -1422,8 +1506,23 @@ index cc3de29..2968f7c 100644
  
  #ifdef __cplusplus
  }
+diff --git a/histsearch.c b/histsearch.c
+index 7a426c9..f7d9315 100644
+--- a/histsearch.c
++++ b/histsearch.c
+@@ -19,7 +19,9 @@
+    along with History.  If not, see <http://www.gnu.org/licenses/>.
+ */
+ 
+-#define READLINE_LIBRARY
++#ifndef READLINE_LIBRARY
++#  define READLINE_LIBRARY
++#endif
+ 
+ #if defined (HAVE_CONFIG_H)
+ #  include <config.h>
 diff --git a/input.c b/input.c
-index 61b0fde..3a9b9d6 100644
+index 61b0fde..73665f9 100644
 --- a/input.c
 +++ b/input.c
 @@ -3,7 +3,7 @@
@@ -1435,7 +1534,18 @@ index 61b0fde..3a9b9d6 100644
  
     Readline is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
-@@ -204,6 +204,7 @@ _rl_unget_char (int key)
+@@ -19,7 +19,9 @@
+    along with Readline.  If not, see <http://www.gnu.org/licenses/>.
+ */
+ 
+-#define READLINE_LIBRARY
++#ifndef READLINE_LIBRARY
++#  define READLINE_LIBRARY
++#endif
+ 
+ #if defined (__TANDEM)
+ #  define _XOPEN_SOURCE_EXTENDED 1
+@@ -204,6 +206,7 @@ _rl_unget_char (int key)
    return (0);
  }
  
@@ -1443,7 +1553,7 @@ index 61b0fde..3a9b9d6 100644
  /* If a character is available to be read, then read it and stuff it into
     IBUFFER.  Otherwise, just return.  Returns number of characters read
     (0 if none available) and -1 on error (EIO). */
-@@ -309,6 +310,7 @@ rl_gather_tyi (void)
+@@ -309,6 +312,7 @@ rl_gather_tyi (void)
  
    return 1;
  }
@@ -1451,7 +1561,7 @@ index 61b0fde..3a9b9d6 100644
  
  int
  rl_set_keyboard_input_timeout (int u)
-@@ -321,6 +323,7 @@ rl_set_keyboard_input_timeout (int u)
+@@ -321,6 +325,7 @@ rl_set_keyboard_input_timeout (int u)
    return (o);
  }
  
@@ -1459,7 +1569,7 @@ index 61b0fde..3a9b9d6 100644
  /* Is there input available to be read on the readline input file
     descriptor?  Only works if the system has select(2) or FIONREAD.
     Uses the value of _keyboard_input_timeout as the timeout; if another
-@@ -367,20 +370,21 @@ _rl_input_available (void)
+@@ -367,20 +372,21 @@ _rl_input_available (void)
  
    return 0;
  }
@@ -1487,7 +1597,7 @@ index 61b0fde..3a9b9d6 100644
  #endif
  
    return chars_avail;
-@@ -399,7 +403,7 @@ _rl_input_queued (int t)
+@@ -399,7 +405,7 @@ _rl_input_queued (int t)
  
  void
  _rl_insert_typein (int c)
@@ -1496,7 +1606,7 @@ index 61b0fde..3a9b9d6 100644
    int key, t, i;
    char *string;
  
-@@ -493,7 +497,7 @@ rl_read_key (void)
+@@ -493,7 +499,7 @@ rl_read_key (void)
  	    {
  	      if (rl_get_char (&c) != 0)
  		break;
@@ -1505,7 +1615,7 @@ index 61b0fde..3a9b9d6 100644
  	      if ((r = rl_gather_tyi ()) < 0)	/* XXX - EIO */
  		{
  		  rl_done = 1;
-@@ -520,6 +524,7 @@ rl_read_key (void)
+@@ -520,6 +526,7 @@ rl_read_key (void)
    return (c);
  }
  
@@ -1513,7 +1623,7 @@ index 61b0fde..3a9b9d6 100644
  int
  rl_getc (FILE *stream)
  {
-@@ -637,6 +642,221 @@ handle_error:
+@@ -637,6 +644,221 @@ handle_error:
  	(*rl_signal_event_hook) ();
      }
  }
@@ -1735,7 +1845,7 @@ index 61b0fde..3a9b9d6 100644
  
  #if defined (HANDLE_MULTIBYTE)
  /* read multibyte char */
-@@ -651,7 +871,7 @@ _rl_read_mbchar (char *mbchar, int size)
+@@ -651,7 +873,7 @@ _rl_read_mbchar (char *mbchar, int size)
    memset(&ps, 0, sizeof (mbstate_t));
    memset(&ps_back, 0, sizeof (mbstate_t));
  
@@ -1744,7 +1854,7 @@ index 61b0fde..3a9b9d6 100644
    while (mb_len < size)
      {
        c = (mb_len == 0) ? _rl_bracketed_read_key () : rl_read_key ();
-@@ -669,7 +889,7 @@ _rl_read_mbchar (char *mbchar, int size)
+@@ -669,7 +891,7 @@ _rl_read_mbchar (char *mbchar, int size)
  	  /* shorted bytes */
  	  ps = ps_back;
  	  continue;
@@ -1753,6 +1863,36 @@ index 61b0fde..3a9b9d6 100644
        else if (mbchar_bytes_length == 0)
  	{
  	  mbchar[0] = '\0';	/* null wide character */
+diff --git a/isearch.c b/isearch.c
+index 080ba3c..8ea8fcd 100644
+--- a/isearch.c
++++ b/isearch.c
+@@ -25,7 +25,9 @@
+    along with Readline.  If not, see <http://www.gnu.org/licenses/>.
+ */
+ 
+-#define READLINE_LIBRARY
++#ifndef READLINE_LIBRARY
++#  define READLINE_LIBRARY
++#endif
+ 
+ #if defined (HAVE_CONFIG_H)
+ #  include <config.h>
+diff --git a/keymaps.c b/keymaps.c
+index 4ade30b..2a43c3a 100644
+--- a/keymaps.c
++++ b/keymaps.c
+@@ -19,7 +19,9 @@
+    along with Readline.  If not, see <http://www.gnu.org/licenses/>.
+ */
+ 
+-#define READLINE_LIBRARY
++#ifndef READLINE_LIBRARY
++#  define READLINE_LIBRARY
++#endif
+ 
+ #if defined (HAVE_CONFIG_H)
+ #  include <config.h>
 diff --git a/keymaps.h b/keymaps.h
 index 1fa853d..b502363 100644
 --- a/keymaps.h
@@ -1808,8 +1948,68 @@ index 1fa853d..b502363 100644
  
  #ifdef __cplusplus
  }
+diff --git a/kill.c b/kill.c
+index 50c3fde..29c6e9e 100644
+--- a/kill.c
++++ b/kill.c
+@@ -19,7 +19,9 @@
+    along with Readline.  If not, see <http://www.gnu.org/licenses/>.
+ */
+ 
+-#define READLINE_LIBRARY
++#ifndef READLINE_LIBRARY
++#  define READLINE_LIBRARY
++#endif
+ 
+ #if defined (HAVE_CONFIG_H)
+ #  include <config.h>
+diff --git a/macro.c b/macro.c
+index 92cc55c..207dc1d 100644
+--- a/macro.c
++++ b/macro.c
+@@ -19,7 +19,9 @@
+    along with Readline.  If not, see <http://www.gnu.org/licenses/>.
+ */
+ 
+-#define READLINE_LIBRARY
++#ifndef READLINE_LIBRARY
++#  define READLINE_LIBRARY
++#endif
+ 
+ #if defined (HAVE_CONFIG_H)
+ #  include <config.h>
+diff --git a/mbutil.c b/mbutil.c
+index dc62b4c..6947efe 100644
+--- a/mbutil.c
++++ b/mbutil.c
+@@ -19,7 +19,9 @@
+    along with Readline.  If not, see <http://www.gnu.org/licenses/>.
+ */
+ 
+-#define READLINE_LIBRARY
++#ifndef READLINE_LIBRARY
++#  define READLINE_LIBRARY
++#endif
+ 
+ #if defined (HAVE_CONFIG_H)
+ #  include <config.h>
+diff --git a/misc.c b/misc.c
+index 3d9a674..d9d2b4b 100644
+--- a/misc.c
++++ b/misc.c
+@@ -19,7 +19,9 @@
+    along with Readline.  If not, see <http://www.gnu.org/licenses/>.
+ */
+ 
+-#define READLINE_LIBRARY
++#ifndef READLINE_LIBRARY
++#  define READLINE_LIBRARY
++#endif
+ 
+ #if defined (HAVE_CONFIG_H)
+ #  include <config.h>
 diff --git a/nls.c b/nls.c
-index d2f67e0..f76031c 100644
+index d2f67e0..cbc0289 100644
 --- a/nls.c
 +++ b/nls.c
 @@ -3,7 +3,7 @@
@@ -1821,7 +2021,18 @@ index d2f67e0..f76031c 100644
  
     Readline is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
-@@ -56,7 +56,7 @@
+@@ -19,7 +19,9 @@
+    along with Readline.  If not, see <http://www.gnu.org/licenses/>.
+ */
+ 
+-#define READLINE_LIBRARY
++#ifndef READLINE_LIBRARY
++#  define READLINE_LIBRARY
++#endif
+ 
+ #if defined (HAVE_CONFIG_H)
+ #  include <config.h>
+@@ -56,7 +58,7 @@
  
  static int utf8locale PARAMS((char *));
  
@@ -1830,7 +2041,7 @@ index d2f67e0..f76031c 100644
  /* A list of legal values for the LANG or LC_CTYPE environment variables.
     If a locale name in this list is the value for the LC_ALL, LC_CTYPE,
     or LANG environment variable (using the first of those with a value),
-@@ -155,6 +155,7 @@ _rl_init_eightbit (void)
+@@ -155,6 +157,7 @@ _rl_init_eightbit (void)
  
    t = _rl_init_locale ();	/* returns static pointer */
  
@@ -1838,7 +2049,7 @@ index d2f67e0..f76031c 100644
    if (t && *t && (t[0] != 'C' || t[1]) && (STREQ (t, "POSIX") == 0))
      {
        _rl_meta_flag = 1;
-@@ -163,6 +164,7 @@ _rl_init_eightbit (void)
+@@ -163,6 +166,7 @@ _rl_init_eightbit (void)
        return (1);
      }
    else
@@ -1846,7 +2057,7 @@ index d2f67e0..f76031c 100644
      return (0);
  
  #else /* !HAVE_SETLOCALE */
-@@ -254,7 +256,7 @@ find_codeset (char *name, size_t *lenp)
+@@ -254,7 +258,7 @@ find_codeset (char *name, size_t *lenp)
    /* This does not make sense: language has to be specified.  As
       an exception we allow the variable to contain only the codeset
       name.  Perhaps there are funny codeset names.  */
@@ -1856,7 +2067,7 @@ index d2f67e0..f76031c 100644
        *lenp = strlen (language);
        result = language;
 diff --git a/parens.c b/parens.c
-index af47977..82a7f52 100644
+index af47977..0487953 100644
 --- a/parens.c
 +++ b/parens.c
 @@ -3,7 +3,7 @@
@@ -1868,7 +2079,18 @@ index af47977..82a7f52 100644
  
     Readline is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
-@@ -46,7 +46,11 @@
+@@ -19,7 +19,9 @@
+    along with Readline.  If not, see <http://www.gnu.org/licenses/>.
+ */
+ 
+-#define READLINE_LIBRARY
++#ifndef READLINE_LIBRARY
++#  define READLINE_LIBRARY
++#endif
+ 
+ #if defined (__TANDEM)
+ #  include <floss.h>
+@@ -46,7 +48,11 @@
  #  include <strings.h>
  #endif /* !HAVE_STRING_H */
  
@@ -1881,7 +2103,7 @@ index af47977..82a7f52 100644
  extern char *strchr (), *strrchr ();
  #endif /* !strchr && !__STDC__ */
  
-@@ -57,7 +61,11 @@ static int find_matching_open PARAMS((char *, int, int));
+@@ -57,7 +63,11 @@ static int find_matching_open PARAMS((char *, int, int));
  
  /* Non-zero means try to blink the matching open parenthesis when the
     close parenthesis is inserted. */
@@ -1893,7 +2115,7 @@ index af47977..82a7f52 100644
  
  static int _paren_blink_usec = 500000;
  
-@@ -137,7 +145,23 @@ rl_insert_close (int count, int invoking_key)
+@@ -137,7 +147,23 @@ rl_insert_close (int count, int invoking_key)
        (*rl_redisplay_function) ();
        ready = select (1, &readfds, (fd_set *)NULL, (fd_set *)NULL, &timer);
        rl_point = orig_point;
@@ -1918,6 +2140,21 @@ index af47977..82a7f52 100644
        _rl_insert_char (count, invoking_key);
  #endif /* !HAVE_SELECT */
      }
+diff --git a/parse-colors.c b/parse-colors.c
+index 05ec9bc..afd9efe 100644
+--- a/parse-colors.c
++++ b/parse-colors.c
+@@ -24,7 +24,9 @@
+    Flaherty <dennisf@denix.elk.miles.com> based on original patches by
+    Greg Lee <lee@uhunix.uhcc.hawaii.edu>.  */
+ 
+-#define READLINE_LIBRARY
++#ifndef READLINE_LIBRARY
++#  define READLINE_LIBRARY
++#endif
+ 
+ #if defined (HAVE_CONFIG_H)
+ #  include <config.h>
 diff --git a/posixdir.h b/posixdir.h
 index af5be80..1ee8344 100644
 --- a/posixdir.h
@@ -1949,7 +2186,7 @@ index af5be80..1ee8344 100644
  #if defined (HAVE_STRUCT_DIRENT_D_INO) && !defined (HAVE_STRUCT_DIRENT_D_FILENO)
  #  define d_fileno d_ino
 diff --git a/readline.c b/readline.c
-index e61d188..e9ac1e5 100644
+index e61d188..4dc5552 100644
 --- a/readline.c
 +++ b/readline.c
 @@ -4,7 +4,7 @@
@@ -1961,7 +2198,18 @@ index e61d188..e9ac1e5 100644
  
     Readline is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
-@@ -234,7 +234,7 @@ int _rl_mark_modified_lines = 0;
+@@ -20,7 +20,9 @@
+    along with Readline.  If not, see <http://www.gnu.org/licenses/>.
+ */
+ 
+-#define READLINE_LIBRARY
++#ifndef READLINE_LIBRARY
++#  define READLINE_LIBRARY
++#endif
+ 
+ #if defined (HAVE_CONFIG_H)
+ #  include <config.h>
+@@ -234,7 +236,7 @@ int _rl_mark_modified_lines = 0;
  /* The style of `bell' notification preferred.  This can be set to NO_BELL,
     AUDIBLE_BELL, or VISIBLE_BELL. */
  int _rl_bell_preference = AUDIBLE_BELL;
@@ -1970,7 +2218,7 @@ index e61d188..e9ac1e5 100644
  /* String inserted into the line by rl_insert_comment (). */
  char *_rl_comment_begin;
  
-@@ -279,7 +279,7 @@ int _rl_keyseq_timeout = 500;
+@@ -279,7 +281,7 @@ int _rl_keyseq_timeout = 500;
  	} \
      } \
    while (0);
@@ -1979,7 +2227,7 @@ index e61d188..e9ac1e5 100644
  /* Forward declarations used by the display, termcap, and history code. */
  
  /* **************************************************************** */
-@@ -345,7 +345,7 @@ rl_set_prompt (const char *prompt)
+@@ -345,7 +347,7 @@ rl_set_prompt (const char *prompt)
    rl_visible_prompt_length = rl_expand_prompt (rl_prompt);
    return 0;
  }
@@ -1988,7 +2236,7 @@ index e61d188..e9ac1e5 100644
  /* Read a line of input.  Prompt with PROMPT.  An empty PROMPT means
     none.  A return value of NULL means that EOF was encountered. */
  char *
-@@ -822,7 +822,7 @@ _rl_dispatch_callback (_rl_keyseq_cxt *cxt)
+@@ -822,7 +824,7 @@ _rl_dispatch_callback (_rl_keyseq_cxt *cxt)
    return r;
  }
  #endif /* READLINE_CALLBACKS */
@@ -1997,7 +2245,7 @@ index e61d188..e9ac1e5 100644
  /* Do the command associated with KEY in MAP.
     If the associated command is really a keymap, then read
     another key, and dispatch into that map. */
-@@ -964,7 +964,7 @@ _rl_dispatch_subseq (register int key, Keymap map, int got_subseq)
+@@ -964,7 +966,7 @@ _rl_dispatch_subseq (register int key, Keymap map, int got_subseq)
  	      (RL_ISSTATE (RL_STATE_MACROINPUT) && _rl_peek_macro_key () == 0) &&
  	      _rl_pushed_input_available () == 0 &&
  	      _rl_input_queued ((_rl_keyseq_timeout > 0) ? _rl_keyseq_timeout*1000 : 0) == 0)
@@ -2006,7 +2254,7 @@ index e61d188..e9ac1e5 100644
  #endif
  
  	  RESIZE_KEYSEQ_BUFFER ();
-@@ -1258,7 +1258,7 @@ readline_initialize_everything (void)
+@@ -1258,7 +1260,7 @@ readline_initialize_everything (void)
  
    /* Decide whether we should automatically go into eight-bit mode. */
    _rl_init_eightbit ();
@@ -2015,7 +2263,7 @@ index e61d188..e9ac1e5 100644
    /* Read in the init file. */
    rl_read_init_file ((char *)NULL);
  
-@@ -1416,7 +1416,7 @@ bind_bracketed_paste_prefix (void)
+@@ -1416,7 +1418,7 @@ bind_bracketed_paste_prefix (void)
  
    _rl_keymap = xkeymap;
  }
@@ -2024,7 +2272,7 @@ index e61d188..e9ac1e5 100644
  /* **************************************************************** */
  /*								    */
  /*		Saving and Restoring Readline's state		    */
-@@ -1452,7 +1452,9 @@ rl_save_state (struct readline_state *sp)
+@@ -1452,7 +1454,9 @@ rl_save_state (struct readline_state *sp)
    sp->macro = rl_executing_macro;
  
    sp->catchsigs = rl_catch_signals;
@@ -2034,7 +2282,7 @@ index e61d188..e9ac1e5 100644
  
    sp->entryfunc = rl_completion_entry_function;
    sp->menuentryfunc = rl_menu_completion_entry_function;
-@@ -1492,7 +1494,9 @@ rl_restore_state (struct readline_state *sp)
+@@ -1492,7 +1496,9 @@ rl_restore_state (struct readline_state *sp)
    rl_executing_macro = sp->macro;
  
    rl_catch_signals = sp->catchsigs;
@@ -2045,7 +2293,7 @@ index e61d188..e9ac1e5 100644
    rl_completion_entry_function = sp->entryfunc;
    rl_menu_completion_entry_function = sp->menuentryfunc;
 diff --git a/readline.h b/readline.h
-index 78fa39d..5b18d69 100644
+index 78fa39d..31a68d0 100644
 --- a/readline.h
 +++ b/readline.h
 @@ -3,7 +3,7 @@
@@ -2057,38 +2305,15 @@ index 78fa39d..5b18d69 100644
  
     Readline is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
-@@ -26,6 +26,30 @@
+@@ -26,6 +26,7 @@
  extern "C" {
  #endif
  
-+#ifndef __GNUC__
-+# define __DLL_IMPORT__  __declspec(dllimport)
-+# define __DLL_EXPORT__  __declspec(dllexport)
-+#else
-+# define __DLL_IMPORT__  __attribute__((dllimport)) extern
-+# define __DLL_EXPORT__  __attribute__((dllexport)) extern
-+#endif
-+
-+#if (defined __WIN32__) || (defined _WIN32)
-+# ifdef BUILD_READLINE_DLL
-+#  define READLINE_DLL_IMPEXP     __DLL_EXPORT__
-+# elif defined(READLINE_STATIC)
-+#  define READLINE_DLL_IMPEXP
-+# elif defined (USE_READLINE_DLL)
-+#  define READLINE_DLL_IMPEXP     __DLL_IMPORT__
-+# elif defined (USE_READLINE_STATIC)
-+#  define READLINE_DLL_IMPEXP
-+# else /* assume USE_READLINE_DLL */
-+#  define READLINE_DLL_IMPEXP     __DLL_IMPORT__
-+# endif
-+#else /* __WIN32__ */
-+# define READLINE_DLL_IMPEXP
-+#endif
 +
  #if defined (READLINE_LIBRARY)
  #  include "rlstdc.h"
  #  include "rltypedefs.h"
-@@ -62,7 +86,7 @@ typedef struct undo_list {
+@@ -62,7 +63,7 @@ typedef struct undo_list {
  } UNDO_LIST;
  
  /* The current undo list for RL_LINE_BUFFER. */
@@ -2097,7 +2322,7 @@ index 78fa39d..5b18d69 100644
  
  /* The data structure for mapping textual names to code addresses. */
  typedef struct _funmap {
-@@ -70,7 +94,7 @@ typedef struct _funmap {
+@@ -70,7 +71,7 @@ typedef struct _funmap {
    rl_command_func_t *function;
  } FUNMAP;
  
@@ -2106,7 +2331,7 @@ index 78fa39d..5b18d69 100644
  
  /* **************************************************************** */
  /*								    */
-@@ -79,211 +103,211 @@ extern FUNMAP **funmap;
+@@ -79,211 +80,211 @@ extern FUNMAP **funmap;
  /* **************************************************************** */
  
  /* Bindable commands for numeric arguments. */
@@ -2470,7 +2695,7 @@ index 78fa39d..5b18d69 100644
  
  /* **************************************************************** */
  /*								    */
-@@ -293,214 +317,214 @@ extern int rl_vi_eword PARAMS((int, int));
+@@ -293,214 +294,214 @@ extern int rl_vi_eword PARAMS((int, int));
  
  /* Readline functions. */
  /* Read a line of input.  Prompt with PROMPT.  A NULL PROMPT means none. */
@@ -2822,7 +3047,7 @@ index 78fa39d..5b18d69 100644
  #endif
  
  /* **************************************************************** */
-@@ -510,159 +534,159 @@ extern char *filename_completion_function PARAMS((const char *, int));
+@@ -510,159 +511,159 @@ extern char *filename_completion_function PARAMS((const char *, int));
  /* **************************************************************** */
  
  /* The version of this incarnation of the readline library. */
@@ -3029,7 +3254,7 @@ index 78fa39d..5b18d69 100644
  
  /* If rl_ignore_some_completions_function is non-NULL it is the address
     of a function to call after all of the possible matches have been
-@@ -670,7 +694,7 @@ extern rl_compentry_func_t *rl_menu_completion_entry_function;
+@@ -670,7 +671,7 @@ extern rl_compentry_func_t *rl_menu_completion_entry_function;
     The function is called with one argument; a NULL terminated array
     of (char *).  If your function removes any of the elements, they
     must be free()'ed. */
@@ -3038,7 +3263,7 @@ index 78fa39d..5b18d69 100644
  
  /* Pointer to alternative function to create matches.
     Function is called with TEXT, START, and END.
-@@ -679,39 +703,39 @@ extern rl_compignore_func_t *rl_ignore_some_completions_function;
+@@ -679,39 +680,39 @@ extern rl_compignore_func_t *rl_ignore_some_completions_function;
     If this function exists and returns NULL then call the value of
     rl_completion_entry_function to try to match, otherwise use the
     array of strings returned. */
@@ -3087,7 +3312,7 @@ index 78fa39d..5b18d69 100644
  
  /* If non-zero, then this is the address of a function to call when
     completing on a directory name.  The function is called with
-@@ -722,7 +746,7 @@ extern const char *rl_special_prefixes;
+@@ -722,7 +723,7 @@ extern const char *rl_special_prefixes;
     the directory name pointer passed as an argument.  If the directory
     completion hook returns 0, it should not modify the directory name
     pointer passed as an argument. */
@@ -3096,7 +3321,7 @@ index 78fa39d..5b18d69 100644
  
  /* If non-zero, this is the address of a function to call when completing
     a directory name.  This function takes the address of the directory name
-@@ -735,14 +759,14 @@ extern rl_icppfunc_t *rl_directory_completion_hook;
+@@ -735,14 +736,14 @@ extern rl_icppfunc_t *rl_directory_completion_hook;
  
     I'm not happy with how this works yet, so it's undocumented.  I'm trying
     it in bash to see how well it goes. */
@@ -3113,7 +3338,7 @@ index 78fa39d..5b18d69 100644
  
  /* If non-zero, this is the address of a function to call when reading
     directory entries from the filesystem for completion and comparing
-@@ -753,7 +777,7 @@ extern rl_icppfunc_t *rl_filename_stat_hook;
+@@ -753,7 +754,7 @@ extern rl_icppfunc_t *rl_filename_stat_hook;
     keyboard.  The returned value is what is added to the list of
     matches.  The second argument is the length of the filename to be
     converted. */
@@ -3122,7 +3347,7 @@ index 78fa39d..5b18d69 100644
  
  /* Backwards compatibility with previous versions of readline. */
  #define rl_symbolic_link_hook rl_directory_completion_hook
-@@ -765,76 +789,76 @@ extern rl_dequote_func_t *rl_filename_rewrite_hook;
+@@ -765,76 +766,76 @@ extern rl_dequote_func_t *rl_filename_rewrite_hook;
     where MATCHES is the array of strings that matched, NUM_MATCHES is the
     number of strings in that array, and MAX_LENGTH is the length of the
     longest string in that array. */
@@ -3215,7 +3440,7 @@ index 78fa39d..5b18d69 100644
  
  /* If non-zero, a slash will be appended to completed filenames that are
     symbolic links to directory names, subject to the value of the
-@@ -845,22 +869,22 @@ extern int rl_sort_completion_matches;
+@@ -845,22 +846,22 @@ extern int rl_sort_completion_matches;
     rl_complete_internal before any application-specific completion
     function is called, so without that function doing anything, the user's
     preferences are honored. */
@@ -3243,7 +3468,7 @@ index 78fa39d..5b18d69 100644
  
  /* Input error; can be returned by (*rl_getc_function) if readline is reading
     a top-level command (RL_ISSTATE (RL_STATE_READCMD)). */
-@@ -954,13 +978,13 @@ struct readline_state {
+@@ -954,13 +955,13 @@ struct readline_state {
    /* options state */
  
    /* hook state */
@@ -4123,7 +4348,7 @@ index 3e17d8b..aaf0333 100644
  
  #endif /* _RL_SHELL_H_ */
 diff --git a/rlstdc.h b/rlstdc.h
-index 2aaa30b..0eb8e2b 100644
+index 2aaa30b..451c124 100644
 --- a/rlstdc.h
 +++ b/rlstdc.h
 @@ -3,7 +3,7 @@
@@ -4160,17 +4385,26 @@ index 2aaa30b..0eb8e2b 100644
 +#  define READLINE_DLL_IMPEXP     __DLL_IMPORT__
 +# endif
 +#else /* __WIN32__ */
-+# define READLINE_DLL_IMPEXP
++# define READLINE_DLL_IMPEXP extern
 +#endif
 +
  /* Moved from config.h.in because readline.h:rl_message depends on these
     defines. */
  #if defined (__STDC__) && defined (HAVE_STDARG_H)
 diff --git a/rltty.c b/rltty.c
-index d0cd572..7e7e04f 100644
+index d0cd572..3818d19 100644
 --- a/rltty.c
 +++ b/rltty.c
-@@ -26,6 +26,9 @@
+@@ -20,12 +20,17 @@
+    along with Readline.  If not, see <http://www.gnu.org/licenses/>.
+ */
+ 
+-#define READLINE_LIBRARY
++#ifndef READLINE_LIBRARY
++#  define READLINE_LIBRARY
++#endif
+ 
+ #if defined (HAVE_CONFIG_H)
  #  include <config.h>
  #endif
  
@@ -4180,7 +4414,7 @@ index d0cd572..7e7e04f 100644
  #include <sys/types.h>
  #include <signal.h>
  #include <errno.h>
-@@ -38,6 +41,12 @@
+@@ -38,6 +43,12 @@
  #include "rldefs.h"
  
  #include "rltty.h"
@@ -4193,7 +4427,7 @@ index d0cd572..7e7e04f 100644
  #if defined (HAVE_SYS_IOCTL_H)
  #  include <sys/ioctl.h>		/* include for declaration of ioctl */
  #endif
-@@ -54,6 +63,7 @@ rl_voidfunc_t *rl_deprep_term_function = rl_deprep_terminal;
+@@ -54,6 +65,7 @@ rl_voidfunc_t *rl_deprep_term_function = rl_deprep_terminal;
  
  static void set_winsize PARAMS((int));
  
@@ -4201,7 +4435,7 @@ index d0cd572..7e7e04f 100644
  /* **************************************************************** */
  /*								    */
  /*		      Saving and Restoring the TTY	    	    */
-@@ -477,7 +487,7 @@ set_tty_settings (int tty, TIOTYPE *tiop)
+@@ -477,7 +489,7 @@ set_tty_settings (int tty, TIOTYPE *tiop)
  {
    if (_set_tty_settings (tty, tiop) < 0)
      return -1;
@@ -4210,7 +4444,7 @@ index d0cd572..7e7e04f 100644
  #if 0
  
  #if defined (TERMIOS_TTY_DRIVER)
-@@ -900,6 +910,115 @@ rltty_set_default_bindings (Keymap kmap)
+@@ -900,6 +912,115 @@ rltty_set_default_bindings (Keymap kmap)
  #endif
  }
  
@@ -4326,7 +4560,7 @@ index d0cd572..7e7e04f 100644
  /* New public way to set the system default editing chars to their readline
     equivalents. */
  void
-@@ -908,6 +1027,7 @@ rl_tty_set_default_bindings (Keymap kmap)
+@@ -908,6 +1029,7 @@ rl_tty_set_default_bindings (Keymap kmap)
    rltty_set_default_bindings (kmap);
  }
  
@@ -4334,7 +4568,7 @@ index d0cd572..7e7e04f 100644
  /* Rebind all of the tty special chars that readline worries about back
     to self-insert.  Call this before saving the current terminal special
     chars with save_tty_chars().  This only works on POSIX termios or termio
-@@ -930,6 +1050,7 @@ rl_tty_unset_default_bindings (Keymap kmap)
+@@ -930,6 +1052,7 @@ rl_tty_unset_default_bindings (Keymap kmap)
    RESET_SPECIAL (_rl_tty_chars.t_werase);
  #  endif /* VWERASE && TERMIOS_TTY_DRIVER */
  }
@@ -4364,8 +4598,60 @@ index 5bcc946..e6be843 100644
  #  include <sgtty.h>
  #endif
  
+diff --git a/rltypedefs.h b/rltypedefs.h
+index f9f5cd3..77a1d23 100644
+--- a/rltypedefs.h
++++ b/rltypedefs.h
+@@ -3,7 +3,7 @@
+ /* Copyright (C) 2000-2011 Free Software Foundation, Inc.
+ 
+    This file is part of the GNU Readline Library (Readline), a library
+-   for reading lines of text with interactive input and history editing.      
++   for reading lines of text with interactive input and history editing.
+ 
+    Readline is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+@@ -26,6 +26,8 @@
+ extern "C" {
+ #endif
+ 
++#include <stdio.h>
++
+ /* Old-style, attempt to mark as deprecated in some way people will notice. */
+ 
+ #if !defined (_FUNCTION_DEF)
+diff --git a/savestring.c b/savestring.c
+index f4bb6aa..3e1a45a 100644
+--- a/savestring.c
++++ b/savestring.c
+@@ -19,7 +19,9 @@
+    along with Readline.  If not, see <http://www.gnu.org/licenses/>.
+ */
+ 
+-#define READLINE_LIBRARY
++#ifndef READLINE_LIBRARY
++#  define READLINE_LIBRARY
++#endif
+ 
+ #include <config.h>
+ #ifdef HAVE_STRING_H
+diff --git a/search.c b/search.c
+index 38a2936..3e4a93b 100644
+--- a/search.c
++++ b/search.c
+@@ -19,7 +19,9 @@
+    along with Readline.  If not, see <http://www.gnu.org/licenses/>.
+ */
+ 
+-#define READLINE_LIBRARY
++#ifndef READLINE_LIBRARY
++#  define READLINE_LIBRARY
++#endif
+ 
+ #if defined (HAVE_CONFIG_H)
+ #  include <config.h>
 diff --git a/shell.c b/shell.c
-index 7fe2e97..10a5b78 100644
+index 7fe2e97..2df0f2a 100644
 --- a/shell.c
 +++ b/shell.c
 @@ -4,7 +4,7 @@
@@ -4377,7 +4663,17 @@ index 7fe2e97..10a5b78 100644
  
     Readline is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
-@@ -27,6 +27,7 @@
+@@ -20,13 +20,16 @@
+    along with Readline.  If not, see <http://www.gnu.org/licenses/>.
+ */
+ 
+-#define READLINE_LIBRARY
++#ifndef READLINE_LIBRARY
++#  define READLINE_LIBRARY
++#endif
+ 
+ #if defined (HAVE_CONFIG_H)
+ #  include <config.h>
  #endif
  
  #include <sys/types.h>
@@ -4385,7 +4681,7 @@ index 7fe2e97..10a5b78 100644
  
  #if defined (HAVE_UNISTD_H)
  #  include <unistd.h>
-@@ -51,11 +52,13 @@
+@@ -51,11 +54,13 @@
  #if defined (HAVE_FCNTL_H)
  #include <fcntl.h>
  #endif
@@ -4401,7 +4697,7 @@ index 7fe2e97..10a5b78 100644
  
  #include "rlstdc.h"
  #include "rlshell.h"
-@@ -155,6 +158,7 @@ char *
+@@ -155,6 +160,7 @@ char *
  sh_get_home_dir (void)
  {
    static char *home_dir = (char *)NULL;
@@ -4409,7 +4705,7 @@ index 7fe2e97..10a5b78 100644
    struct passwd *entry;
  
    if (home_dir)
-@@ -174,6 +178,9 @@ sh_get_home_dir (void)
+@@ -174,6 +180,9 @@ sh_get_home_dir (void)
  #if defined (HAVE_GETPWENT)
    endpwent ();		/* some systems need this */
  #endif
@@ -4419,7 +4715,7 @@ index 7fe2e97..10a5b78 100644
  
    return (home_dir);
  }
-@@ -184,6 +191,7 @@ sh_get_home_dir (void)
+@@ -184,6 +193,7 @@ sh_get_home_dir (void)
  #  endif
  #endif
  
@@ -4427,7 +4723,7 @@ index 7fe2e97..10a5b78 100644
  int
  sh_unset_nodelay_mode (int fd)
  {
-@@ -212,3 +220,29 @@ sh_unset_nodelay_mode (int fd)
+@@ -212,3 +222,29 @@ sh_unset_nodelay_mode (int fd)
  
    return 0;
  }
@@ -4458,7 +4754,7 @@ index 7fe2e97..10a5b78 100644
 +}
 +#endif /* !_WIN32  */
 diff --git a/signals.c b/signals.c
-index f9174ab..d4253ef 100644
+index f9174ab..780a285 100644
 --- a/signals.c
 +++ b/signals.c
 @@ -3,7 +3,7 @@
@@ -4470,7 +4766,18 @@ index f9174ab..d4253ef 100644
  
     Readline is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
-@@ -78,13 +78,15 @@ typedef struct { SigHandler *sa_handler; int sa_mask, sa_flags; } sighandler_cxt
+@@ -19,7 +19,9 @@
+    along with Readline.  If not, see <http://www.gnu.org/licenses/>.
+ */
+ 
+-#define READLINE_LIBRARY
++#ifndef READLINE_LIBRARY
++#  define READLINE_LIBRARY
++#endif
+ 
+ #if defined (HAVE_CONFIG_H)
+ #  include <config.h>
+@@ -78,13 +80,15 @@ typedef struct { SigHandler *sa_handler; int sa_mask, sa_flags; } sighandler_cxt
  #  define SA_RESTART 0
  #endif
  
@@ -4487,7 +4794,7 @@ index f9174ab..d4253ef 100644
  /* Exported variables for use by applications. */
  
  /* If non-zero, readline will install its own signal handlers for
-@@ -110,12 +112,15 @@ int _rl_quit_char = 0;
+@@ -110,12 +114,15 @@ int _rl_quit_char = 0;
  int _rl_susp_char = 0;
  
  static int signals_set_flag;
@@ -4503,7 +4810,7 @@ index f9174ab..d4253ef 100644
  /* **************************************************************** */
  /*					        		    */
  /*			   Signal Handling                          */
-@@ -320,7 +325,7 @@ _rl_handle_signal (int sig)
+@@ -320,7 +327,7 @@ _rl_handle_signal (int sig)
  #endif /* !HAVE_POSIX_SIGNALS */
  #endif
  
@@ -4512,7 +4819,7 @@ index f9174ab..d4253ef 100644
      }
  
    RL_UNSETSTATE(RL_STATE_SIGHANDLER);
-@@ -465,7 +470,7 @@ rl_set_signals (void)
+@@ -465,7 +472,7 @@ rl_set_signals (void)
        sigaddset (&bset, SIGTTOU);
  #endif
        sigmask_set = 1;
@@ -4521,7 +4828,7 @@ index f9174ab..d4253ef 100644
  #endif /* HAVE_POSIX_SIGNALS */
  
    if (rl_catch_signals && signals_set_flag == 0)
-@@ -585,6 +590,7 @@ rl_clear_signals (void)
+@@ -585,6 +592,7 @@ rl_clear_signals (void)
  
    return 0;
  }
@@ -4529,7 +4836,7 @@ index f9174ab..d4253ef 100644
  
  /* Clean up the terminal and readline state after catching a signal, before
     resending it to the calling application. */
-@@ -610,7 +616,7 @@ rl_reset_after_signal (void)
+@@ -610,7 +618,7 @@ rl_reset_after_signal (void)
  /* Free up the readline variable line state for the current line (undo list,
     any partial history entry, any keyboard macros in progress, and any
     numeric arguments in process) after catching a signal, before calling
@@ -4538,7 +4845,7 @@ index f9174ab..d4253ef 100644
  void
  rl_free_line_state (void)
  {
-@@ -638,8 +644,58 @@ rl_check_signals (void)
+@@ -638,8 +646,58 @@ rl_check_signals (void)
  {
    RL_CHECK_SIGNALS ();
  }
@@ -4598,7 +4905,7 @@ index f9174ab..d4253ef 100644
  /*								    */
  /*			   SIGINT Management			    */
 diff --git a/terminal.c b/terminal.c
-index 05415dc..206ae57 100644
+index 05415dc..f167c91 100644
 --- a/terminal.c
 +++ b/terminal.c
 @@ -3,7 +3,7 @@
@@ -4610,7 +4917,18 @@ index 05415dc..206ae57 100644
  
     Readline is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
-@@ -51,14 +51,23 @@
+@@ -19,7 +19,9 @@
+    along with Readline.  If not, see <http://www.gnu.org/licenses/>.
+ */
+ 
+-#define READLINE_LIBRARY
++#ifndef READLINE_LIBRARY
++#  define READLINE_LIBRARY
++#endif
+ 
+ #if defined (HAVE_CONFIG_H)
+ #  include <config.h>
+@@ -51,14 +53,23 @@
  /* System-specific feature definitions and include files. */
  #include "rldefs.h"
  
@@ -4637,7 +4955,7 @@ index 05415dc..206ae57 100644
  #include "tcap.h"
  
  /* Some standard library routines. */
-@@ -95,7 +104,7 @@ int rl_change_environment = 1;
+@@ -95,7 +106,7 @@ int rl_change_environment = 1;
  /*								    */
  /* **************************************************************** */
  
@@ -4646,7 +4964,7 @@ index 05415dc..206ae57 100644
  static char *term_buffer = (char *)NULL;
  static char *term_string_buffer = (char *)NULL;
  #endif
-@@ -104,7 +113,7 @@ static int tcap_initialized;
+@@ -104,7 +115,7 @@ static int tcap_initialized;
  
  #if !defined (__linux__) && !defined (NCURSES_VERSION)
  #  if defined (__EMX__) || defined (NEED_EXTERN_PC)
@@ -4655,7 +4973,7 @@ index 05415dc..206ae57 100644
  #  endif /* __EMX__ || NEED_EXTERN_PC */
  char PC, *BC, *UP;
  #endif /* !__linux__ && !NCURSES_VERSION */
-@@ -243,6 +252,7 @@ _win_get_screensize (int *swp, int *shp)
+@@ -243,6 +254,7 @@ _win_get_screensize (int *swp, int *shp)
     to the terminal.  If IGNORE_ENV is true, we do not pay attention to the
     values of $LINES and $COLUMNS.  The tests for TERM_STRING_BUFFER being
     non-null serve to check whether or not we have initialized termcap. */
@@ -4663,7 +4981,7 @@ index 05415dc..206ae57 100644
  void
  _rl_get_screen_size (int tty, int ignore_env)
  {
-@@ -332,6 +342,27 @@ _rl_get_screen_size (int tty, int ignore_env)
+@@ -332,6 +344,27 @@ _rl_get_screen_size (int tty, int ignore_env)
  
    _rl_screenchars = _rl_screenwidth * _rl_screenheight;
  }
@@ -4691,7 +5009,7 @@ index 05415dc..206ae57 100644
  
  void
  _rl_set_screen_size (int rows, int cols)
-@@ -378,7 +409,7 @@ _rl_sigwinch_resize_terminal (void)
+@@ -378,7 +411,7 @@ _rl_sigwinch_resize_terminal (void)
  {
    _rl_get_screen_size (fileno (rl_instream), 1);
  }
@@ -4700,7 +5018,7 @@ index 05415dc..206ae57 100644
  void
  rl_resize_terminal (void)
  {
-@@ -392,6 +423,7 @@ rl_resize_terminal (void)
+@@ -392,6 +425,7 @@ rl_resize_terminal (void)
      }
  }
  
@@ -4708,7 +5026,7 @@ index 05415dc..206ae57 100644
  struct _tc_string {
       const char * const tc_var;
       char **tc_value;
-@@ -450,10 +482,36 @@ get_term_capabilities (char **bp)
+@@ -450,10 +484,36 @@ get_term_capabilities (char **bp)
  #endif
    tcap_initialized = 1;
  }
@@ -4745,7 +5063,7 @@ index 05415dc..206ae57 100644
    const char *term;
    char *buffer;
    int tty, tgetent_ret, dumbterm;
-@@ -605,10 +663,13 @@ _rl_init_terminal_io (const char *terminal_name)
+@@ -605,10 +665,13 @@ _rl_init_terminal_io (const char *terminal_name)
       bracketed paste mode, so we assume a terminal named "dumb" does not. */
    if (dumbterm)
      _rl_enable_bracketed_paste = 0;
@@ -4760,7 +5078,7 @@ index 05415dc..206ae57 100644
  /* Bind the arrow key sequences from the termcap description in MAP. */
  static void
  bind_termcap_arrow_keys (Keymap map)
-@@ -646,6 +707,7 @@ rl_get_termcap (const char *cap)
+@@ -646,6 +709,7 @@ rl_get_termcap (const char *cap)
      }
    return ((char *)NULL);
  }
@@ -4768,7 +5086,7 @@ index 05415dc..206ae57 100644
  
  /* Re-initialize the terminal considering that the TERM/TERMCAP variable
     has changed. */
-@@ -657,6 +719,7 @@ rl_reset_terminal (const char *terminal_name)
+@@ -657,6 +721,7 @@ rl_reset_terminal (const char *terminal_name)
    return 0;
  }
  
@@ -4776,7 +5094,7 @@ index 05415dc..206ae57 100644
  /* A function for the use of tputs () */
  #ifdef _MINIX
  void
-@@ -711,7 +774,7 @@ rl_crlf (void)
+@@ -711,7 +776,7 @@ rl_crlf (void)
  void
  _rl_cr (void)
  {
@@ -4785,7 +5103,7 @@ index 05415dc..206ae57 100644
    putc ('\r', rl_outstream);
  #else
    tputs (_rl_term_cr, 1, _rl_output_character_function);
-@@ -750,6 +813,80 @@ rl_ding (void)
+@@ -750,6 +815,80 @@ rl_ding (void)
    return (-1);
  }
  
@@ -4866,7 +5184,7 @@ index 05415dc..206ae57 100644
  /* **************************************************************** */
  /*								    */
  /*		Entering and leaving terminal standout mode	    */
-@@ -759,7 +896,7 @@ rl_ding (void)
+@@ -759,7 +898,7 @@ rl_ding (void)
  void
  _rl_standout_on (void)
  {
@@ -4875,7 +5193,7 @@ index 05415dc..206ae57 100644
    if (_rl_term_so && _rl_term_se)
      tputs (_rl_term_so, 1, _rl_output_character_function);
  #endif
-@@ -768,7 +905,7 @@ _rl_standout_on (void)
+@@ -768,7 +907,7 @@ _rl_standout_on (void)
  void
  _rl_standout_off (void)
  {
@@ -4884,7 +5202,7 @@ index 05415dc..206ae57 100644
    if (_rl_term_so && _rl_term_se)
      tputs (_rl_term_se, 1, _rl_output_character_function);
  #endif
-@@ -785,7 +922,7 @@ static int enabled_meta = 0;	/* flag indicating we enabled meta mode */
+@@ -785,7 +924,7 @@ static int enabled_meta = 0;	/* flag indicating we enabled meta mode */
  void
  _rl_enable_meta_key (void)
  {
@@ -4893,7 +5211,7 @@ index 05415dc..206ae57 100644
    if (term_has_meta && _rl_term_mm)
      {
        tputs (_rl_term_mm, 1, _rl_output_character_function);
-@@ -797,7 +934,7 @@ _rl_enable_meta_key (void)
+@@ -797,7 +936,7 @@ _rl_enable_meta_key (void)
  void
  _rl_disable_meta_key (void)
  {
@@ -4902,7 +5220,7 @@ index 05415dc..206ae57 100644
    if (term_has_meta && _rl_term_mo && enabled_meta)
      {
        tputs (_rl_term_mo, 1, _rl_output_character_function);
-@@ -809,7 +946,7 @@ _rl_disable_meta_key (void)
+@@ -809,7 +948,7 @@ _rl_disable_meta_key (void)
  void
  _rl_control_keypad (int on)
  {
@@ -4911,7 +5229,7 @@ index 05415dc..206ae57 100644
    if (on && _rl_term_ks)
      tputs (_rl_term_ks, 1, _rl_output_character_function);
    else if (!on && _rl_term_ke)
-@@ -830,7 +967,7 @@ _rl_control_keypad (int on)
+@@ -830,7 +969,7 @@ _rl_control_keypad (int on)
  void
  _rl_set_cursor (int im, int force)
  {
@@ -4920,6 +5238,21 @@ index 05415dc..206ae57 100644
    if (_rl_term_ve && _rl_term_vs)
      {
        if (force || im != rl_insert_mode)
+diff --git a/text.c b/text.c
+index 2567dea..24c03c6 100644
+--- a/text.c
++++ b/text.c
+@@ -19,7 +19,9 @@
+    along with Readline.  If not, see <http://www.gnu.org/licenses/>.
+ */
+ 
+-#define READLINE_LIBRARY
++#ifndef READLINE_LIBRARY
++#  define READLINE_LIBRARY
++#endif
+ 
+ #if defined (HAVE_CONFIG_H)
+ #  include <config.h>
 diff --git a/tilde.c b/tilde.c
 index d678a31..ce8c4fd 100644
 --- a/tilde.c
@@ -5052,8 +5385,23 @@ index e26dd04..5f62e82 100644
  
  #ifdef __cplusplus
  }
+diff --git a/undo.c b/undo.c
+index 1479991..265f0ca 100644
+--- a/undo.c
++++ b/undo.c
+@@ -19,7 +19,9 @@
+    along with Readline.  If not, see <http://www.gnu.org/licenses/>.
+ */
+ 
+-#define READLINE_LIBRARY
++#ifndef READLINE_LIBRARY
++#  define READLINE_LIBRARY
++#endif
+ 
+ #if defined (HAVE_CONFIG_H)
+ #  include <config.h>
 diff --git a/util.c b/util.c
-index 1576b55..2d25baa 100644
+index 1576b55..c21be6f 100644
 --- a/util.c
 +++ b/util.c
 @@ -3,7 +3,7 @@
@@ -5065,7 +5413,18 @@ index 1576b55..2d25baa 100644
  
     Readline is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
-@@ -86,7 +86,7 @@ _rl_walphabetic (wchar_t wc)
+@@ -19,7 +19,9 @@
+    along with Readline.  If not, see <http://www.gnu.org/licenses/>.
+ */
+ 
+-#define READLINE_LIBRARY
++#ifndef READLINE_LIBRARY
++#  define READLINE_LIBRARY
++#endif
+ 
+ #if defined (HAVE_CONFIG_H)
+ #  include <config.h>
+@@ -86,7 +88,7 @@ _rl_walphabetic (wchar_t wc)
    int c;
  
    if (iswalnum (wc))
@@ -5074,7 +5433,7 @@ index 1576b55..2d25baa 100644
  
    c = wc & 0177;
    return (_rl_allow_pathname_alphabetic_chars &&
-@@ -362,7 +362,7 @@ _rl_strpbrk (const char *string1, const char *string2)
+@@ -362,7 +364,7 @@ _rl_strpbrk (const char *string1, const char *string2)
  }
  #endif
  
@@ -5083,6 +5442,51 @@ index 1576b55..2d25baa 100644
  /* Compare at most COUNT characters from string1 to string2.  Case
     doesn't matter (strncasecmp). */
  int
+diff --git a/vi_mode.c b/vi_mode.c
+index 742341e..41ef25c 100644
+--- a/vi_mode.c
++++ b/vi_mode.c
+@@ -20,7 +20,9 @@
+    along with Readline.  If not, see <http://www.gnu.org/licenses/>.
+ */
+ 
+-#define READLINE_LIBRARY
++#ifndef READLINE_LIBRARY
++#  define READLINE_LIBRARY
++#endif
+ 
+ /* **************************************************************** */
+ /*								    */
+diff --git a/xfree.c b/xfree.c
+index c199b29..4000cb3 100644
+--- a/xfree.c
++++ b/xfree.c
+@@ -19,7 +19,9 @@
+    along with Readline.  If not, see <http://www.gnu.org/licenses/>.
+ */
+ 
+-#define READLINE_LIBRARY
++#ifndef READLINE_LIBRARY
++#  define READLINE_LIBRARY
++#endif
+ 
+ #if defined (HAVE_CONFIG_H)
+ #include <config.h>
+diff --git a/xmalloc.c b/xmalloc.c
+index 5d01d75..c5da8fb 100644
+--- a/xmalloc.c
++++ b/xmalloc.c
+@@ -19,7 +19,9 @@
+    along with Readline.  If not, see <http://www.gnu.org/licenses/>.
+ */
+ 
+-#define READLINE_LIBRARY
++#ifndef READLINE_LIBRARY
++#  define READLINE_LIBRARY
++#endif
+ 
+ #if defined (HAVE_CONFIG_H)
+ #include <config.h>
 -- 
 2.25.1
 
