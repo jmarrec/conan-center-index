@@ -8,8 +8,16 @@ class TestPackageConan(ConanFile):
     generators = "CMakeDeps", "CMakeToolchain"
 
     def build(self):
+
         cmake = CMake(self)
-        cmake.configure()
+        # when --static-linked-ext is used, ruby defines EXTSTATIC as 1
+        # But when ruby itself is static there's nothing, so:
+        # We define RUBY_STATIC_RUBY when ruby itself is static
+        # We define RUBY_STATIC_LINKED_EXT when the ruby extensions are static (same as EXTSTATIC but clearer)
+        defs = None
+        if not self.options['ruby'].shared:
+            defs = {'RUBY_STATIC_RUBY': 1}
+        cmake.configure(variables=defs)
         cmake.build()
 
     def test(self):
