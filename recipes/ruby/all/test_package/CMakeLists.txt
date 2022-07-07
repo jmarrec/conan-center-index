@@ -1,9 +1,9 @@
 cmake_minimum_required(VERSION 3.1)
-project(test_package C)
+project(test_package)
 
 find_package(Ruby REQUIRED)
 
-add_executable(${PROJECT_NAME} test_package.c)
+add_executable(${PROJECT_NAME} test_package.cpp)
 target_link_libraries(${PROJECT_NAME} Ruby::Ruby)
 set_target_properties(${PROJECT_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY_RELEASE ${CMAKE_CURRENT_BINARY_DIR}/bin)
 set_target_properties(${PROJECT_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO ${CMAKE_CURRENT_BINARY_DIR}/bin)
