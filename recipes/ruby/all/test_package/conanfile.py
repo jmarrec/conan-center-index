@@ -14,9 +14,11 @@ class TestPackageConan(ConanFile):
         # But when ruby itself is static there's nothing, so:
         # We define RUBY_STATIC_RUBY when ruby itself is static
         # We define RUBY_STATIC_LINKED_EXT when the ruby extensions are static (same as EXTSTATIC but clearer)
-        defs = None
+        defs = {}
         if not self.options['ruby'].shared:
-            defs = {'RUBY_STATIC_RUBY': 1}
+            defs['RUBY_STATIC_RUBY'] = 1
+        if self.options['ruby'].with_static_linked_ext:
+            defs['RUBY_STATIC_LINKED_EXT'] = 1
         cmake.configure(variables=defs)
         cmake.build()
 
