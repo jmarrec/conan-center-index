@@ -1,9 +1,7 @@
 versions:
-  "4.1.1":
-    folder: "all"
   "4.1.0":
-    folder: "all"
+    folder: "pre_4.1.1"
   "4.0.2":
-    folder: "all"
+    folder: "pre_4.1.1"
   "4.0.1":
-    folder: "all"
+    folder: "pre_4.1.1"
