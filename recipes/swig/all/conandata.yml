@@ -1,0 +1,5 @@
+sources:
+  # Newer versions at the top
+  "4.1.1":
+    url: "https://github.com/jmarrec/swig/archive/refs/tags/v4.1.1-post1.tar.gz"
+    sha256: "7ead8ec0774deecc745629cfd1b0441abb1dfa7633484b157df275f1ee556959"
