@@ -45,7 +45,7 @@ class SwigConan(ConanFile):
         self.settings.rm_safe("compiler.cppstd")
 
     def layout(self):
-        cmake_layout(self)
+        pass
 
     def requirements(self):
         self.requires("pcre2/10.42")
@@ -64,11 +64,8 @@ class SwigConan(ConanFile):
         tc = CMakeDeps(self)
         tc.generate()
 
-    def _patch_sources(self):
-        apply_conandata_patches(self)
-
     def build(self):
-        self._patch_sources()  # It can be apply_conandata_patches(self) only in case no more patches are needed
+        apply_conandata_patches(self)
         cmake = CMake(self)
         cmake.configure()
         cmake.build()
@@ -78,44 +75,22 @@ class SwigConan(ConanFile):
         copy(self, pattern="COPYRIGHT", dst=os.path.join(self.package_folder, "licenses"), src=self.source_folder)
         cmake = CMake(self)
         cmake.install()
-        #self._create_cmake_module_variables(
-        #    os.path.join(self.package_folder, self._module_file_rel_path)
-        #)
-
-    def _create_cmake_module_variables(self, module_file):
-        content = textwrap.dedent("""\
-            find_program(SWIG_EXECUTABLE swig)
-            if(NOT SWIG_DIR)
-                execute_process(COMMAND ${SWIG_EXECUTABLE} -swiglib
-                    OUTPUT_VARIABLE SWIG_lib_output OUTPUT_STRIP_TRAILING_WHITESPACE)
-                set(SWIG_DIR ${SWIG_lib_output} CACHE STRING "Location of SWIG library" FORCE)
-            endif()
-            mark_as_advanced(SWIG_DIR SWIG_EXECUTABLE)
-        """)
-        save(self, module_file, content)
-
-    @property
-    def _module_file_rel_path(self):
-        return os.path.join("lib", "cmake", f"conan-official-{self.name}-variables.cmake")
 
     def package_info(self):
-        self.cpp_info.includedirs = []
         self.cpp_info.bindirs = ["bin"]
 
-        # if package has an official FindPACKAGE.cmake listed in https://cmake.org/cmake/help/latest/manual/cmake-modules.7.html#find-modules
-        # examples: bzip2, freetype, gdal, icu, libcurl, libjpeg, libpng, libtiff, openssl, sqlite3, zlib...
-        # self.cpp_info.set_property("cmake_module_file_name", "SWIG")
-        # self.cpp_info.set_property("cmake_module_target_name", "SWIG::SWIG")
-        # self.cpp_info.set_property("cmake_build_modules", [self._module_file_rel_path])
+        # folders not used
+        self.cpp_info.frameworkdirs = []
+        self.cpp_info.libdirs = []
+        self.cpp_info.resdirs = []
+        self.cpp_info.includedirs = []
 
-        self.cpp_info.set_property("cmake_file_name", "SWIG")
+        self.cpp_info.set_property("cmake_find_mode", "none")
+        self.cpp_info.set_property("cmake_module_file_name", "SWIG")
 
         # If they are needed on Linux, m, pthread and dl are usually needed on FreeBSD too
         if self.settings.os in ["Linux", "FreeBSD"]:
             self.cpp_info.system_libs.append("dl")
-
-        # self.cpp_info.build_modules["cmake_find_package"] = [self._module_file_rel_path]
-        # self.cpp_info.build_modules["cmake_find_package_multi"] = [self._module_file_rel_path]
 
         if Version(conan_version).major < 2:
             self.cpp_info.filenames["cmake_find_package"] = "SWIG"
