@@ -5,16 +5,16 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY $<1:${CMAKE_BINARY_DIR}>)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY $<1:${CMAKE_BINARY_DIR}>)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY $<1:${CMAKE_BINARY_DIR}>)
 
+message("PATH = $ENV{PATH}")
+
 find_package(SWIG REQUIRED)
 include(UseSWIG)
 
-set(Python_ADDITIONAL_VERSIONS 3)
-find_package(PythonInterp)
-find_package(PythonLibs 3)
+find_package(Python 3 COMPONENTS Interpreter Development)
 
 enable_testing()
 
-if(PYTHONINTERP_FOUND AND PYTHONLIBS_FOUND)
+if(Python_FOUND)
     swig_add_library(${PROJECT_NAME}
         LANGUAGE python
         SOURCES

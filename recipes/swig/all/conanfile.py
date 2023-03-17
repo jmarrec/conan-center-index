@@ -1,7 +1,8 @@
-from conan import ConanFile
+from conan import ConanFile, conan_version
 from conan.tools.microsoft import is_msvc
 from conan.tools.files import apply_conandata_patches, export_conandata_patches, get, copy, save
 from conan.tools.cmake import CMake, CMakeDeps, CMakeToolchain, cmake_layout
+from conan.tools.scm import Version
 import os
 import textwrap
 
@@ -99,6 +100,7 @@ class SwigConan(ConanFile):
 
     def package_info(self):
         self.cpp_info.includedirs = []
+        self.cpp_info.bindirs = ["bin"]
 
         # if package has an official FindPACKAGE.cmake listed in https://cmake.org/cmake/help/latest/manual/cmake-modules.7.html#find-modules
         # examples: bzip2, freetype, gdal, icu, libcurl, libjpeg, libpng, libtiff, openssl, sqlite3, zlib...
@@ -106,18 +108,23 @@ class SwigConan(ConanFile):
         # self.cpp_info.set_property("cmake_module_target_name", "SWIG::SWIG")
         # self.cpp_info.set_property("cmake_build_modules", [self._module_file_rel_path])
 
+        self.cpp_info.set_property("cmake_file_name", "SWIG")
+
         # If they are needed on Linux, m, pthread and dl are usually needed on FreeBSD too
         if self.settings.os in ["Linux", "FreeBSD"]:
             self.cpp_info.system_libs.append("dl")
 
-        # TODO: to remove in conan v2 once cmake_find_package_* generators removed
-        self.cpp_info.filenames["cmake_find_package"] = "SWIG"
-        self.cpp_info.filenames["cmake_find_package_multi"] = "SWIG"
-        self.cpp_info.names["cmake_find_package"] = "SWIG"
-        self.cpp_info.names["cmake_find_package_multi"] = "SWIG"
         # self.cpp_info.build_modules["cmake_find_package"] = [self._module_file_rel_path]
         # self.cpp_info.build_modules["cmake_find_package_multi"] = [self._module_file_rel_path]
 
+        if Version(conan_version).major < 2:
+            self.cpp_info.filenames["cmake_find_package"] = "SWIG"
+            self.cpp_info.filenames["cmake_find_package_multi"] = "SWIG"
+            # TODO: to remove in conan v2 once cmake_find_package_* generators removed
+            self.cpp_info.names["cmake_find_package"] = "SWIG"
+            self.cpp_info.names["cmake_find_package_multi"] = "SWIG"
+
+        # TODO: remove in conan v2
         bindir = os.path.join(self.package_folder, "bin")
         self.output.info("Appending PATH environment variable: {}".format(bindir))
         self.env_info.PATH.append(bindir)
