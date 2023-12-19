@@ -94,7 +94,7 @@ class RubyConan(ConanFile):
         self.requires("zlib/1.2.12")
 
         if self.options.with_openssl:
-            self.requires("openssl/1.1.1q")
+            self.requires("openssl/[>=1.1.1 <=3.1]")
 
         if self.options.with_libyaml:
             self.requires("libyaml/0.2.5")
