@@ -230,7 +230,7 @@ class RubyConan(ConanFile):
             0
         ]
         self.cpp_info.includedirs = [
-            os.path.join(self.package_folder, "include", f"ruby-{version}"),
+            os.path.join(self.package_folder, "include", f"ruby-{version.major}.{version.minor}.0"),
             os.path.dirname(os.path.dirname(config_file)),
         ]
         self.cpp_info.libs = collect_libs(self)
