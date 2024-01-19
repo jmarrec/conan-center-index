@@ -100,7 +100,14 @@ class RubyConan(ConanFile):
         self.requires("zlib/1.2.12")
 
         if self.options.with_openssl:
-            self.requires("openssl/[>=1.1.1 <=3.1]")
+            if Version(self.version) < "3.2.0":
+                self.requires("openssl/[>=1.1.1 <3.0]")
+            elif Version(self.version) < "3.3.0":
+                # self.requires("openssl/[>=1.1.1 <=3.1]")
+                self.requires("openssl/3.1.0")
+            else:
+                # self.requires("openssl/[>=1.1.1 <=3.2]")
+                self.requires("openssl/3.2.0")
 
         if self.options.get_safe("with_libyaml"):
             self.requires("libyaml/0.2.5")
@@ -158,13 +165,13 @@ class RubyConan(ConanFile):
                 tc.configure_args.append(f"--with-{dep}-dir={root_path}")
                 opt_dirs.append(root_path)
 
-        if opt_dirs:
-            if self.settings.os == "Windows":
-                sep = ";"
-                tc.configure_args.append(f'--with-opt-dir="{sep.join(opt_dirs)}"')
-            else:
-                sep = ":"
-                tc.configure_args.append(f'--with-opt-dir={sep.join(opt_dirs)}')
+        # if opt_dirs:
+        #     if self.settings.os == "Windows":
+        #         sep = ";"
+        #         tc.configure_args.append(f'--with-opt-dir="{sep.join(opt_dirs)}"')
+        #     else:
+        #         sep = ":"
+        #         tc.configure_args.append(f'--with-opt-dir={sep.join(opt_dirs)}')
 
         if cross_building(self) and is_apple_os(self):
             apple_arch = to_apple_arch(self)
@@ -190,8 +197,9 @@ class RubyConan(ConanFile):
 
     def _patch_sources(self):
         apply_conandata_patches(self)
-        replace_in_file(self, os.path.join(self.source_folder, "gems", "bundled_gems"), "rbs 2.0.0", "rbs 3.1.0")
-        replace_in_file(self, os.path.join(self.source_folder, "gems", "bundled_gems"), "debug 1.4.0", "debug 1.6.3")
+        if Version(self.version) < "3.2.0":
+            replace_in_file(self, os.path.join(self.source_folder, "gems", "bundled_gems"), "rbs 2.0.0", "rbs 3.1.0")
+            replace_in_file(self, os.path.join(self.source_folder, "gems", "bundled_gems"), "debug 1.4.0", "debug 1.6.3")
 
     def build(self):
         self._patch_sources()
