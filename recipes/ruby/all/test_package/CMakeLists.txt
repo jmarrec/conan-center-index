@@ -18,3 +18,7 @@ endif()
 if (RUBY_STATIC_LINKED_EXT)
   target_compile_definitions(${PROJECT_NAME} PRIVATE RUBY_STATIC_LINKED_EXT)
 endif()
+
+set(TEST_RB_ABS_PATH "${CMAKE_CURRENT_BINARY_DIR}/test.rb")
+configure_file(test.rb ${TEST_RB_ABS_PATH} COPYONLY)
+target_compile_definitions(${PROJECT_NAME} PRIVATE TEST_RB_ABS_PATH="${TEST_RB_ABS_PATH}")

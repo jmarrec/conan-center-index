@@ -53,6 +53,30 @@ int main(int argc, char* argv[]) {
        end
      )");
 
+  /*
+  rb_eval_string(R"(
+       def absolute_path(path)
+         absolute_path = File.dirname(caller_locations(1,1)[0].path) + '/' + path
+         return absolute_path
+       end
+
+       begin
+         absolute_path = absolute_path('/test')
+         absolute_path = '/Users/julien/Software/Others/conan/conan-center-index/recipes/ruby/all/test_package/test'
+         puts "Trying to require #{absolute_path}"
+         (require absolute_path)
+         puts "I can correctly load the test.rb file"
+       rescue Exception => e
+         puts
+         puts "Error: #{e.message}"
+         puts "Backtrace:\n\t" + e.backtrace.join("\n\t")
+         raise
+       end
+     )");*/
+
+  rb_require(TEST_RB_ABS_PATH);
+  // rb_require("/Users/julien/Software/Others/conan/conan-center-index/recipes/ruby/all/test_package/test");
+
   ruby_finalize();
 
   return EXIT_SUCCESS;
