@@ -151,7 +151,12 @@ class SwigConan(ConanFile):
         self.cpp_info.set_property("cmake_target_name", "SWIG::SWIG")
         self.cpp_info.set_property("cmake_build_modules", [self._cmake_module_rel_path])
 
-        self.buildenv_info.define_path("SWIG_LIB", os.path.join(self.package_folder, "bin", "swiglib"))
+        bindir = os.path.join(self.package_folder, "bin")
+        self.buildenv_info.prepend_path("PATH", bindir)
+        self.buildenv_info.define_path("SWIG_LIB", os.path.join(bindir, "swiglib"))
+
+        self.runenv_info.prepend_path("PATH", bindir)
+        self.runenv_info.define_path("SWIG_LIB", os.path.join(bindir, "swiglib"))
 
         # TODO: to remove in conan v2 once cmake_find_package_* generators removed
         self.cpp_info.names["cmake_find_package"] = "SWIG"
@@ -159,6 +164,5 @@ class SwigConan(ConanFile):
         self.cpp_info.build_modules["cmake_find_package"] = [self._cmake_module_rel_path]
         self.cpp_info.build_modules["cmake_find_package_multi"] = [self._cmake_module_rel_path]
 
-        bindir = os.path.join(self.package_folder, "bin")
         self.env_info.PATH.append(bindir)
-        self.env_info.SWIG_LIB = os.path.join(self.package_folder, "bin", "swiglib")
+        self.env_info.SWIG_LIB = os.path.join(bindir, "swiglib")
