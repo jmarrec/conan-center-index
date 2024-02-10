@@ -115,6 +115,12 @@ class SwigConan(ConanFile):
         # https://github.com/swig/swig/blob/v4.0.2/configure.ac#L65-L86
         replace_in_file(self, os.path.join(self.source_folder, "configure.ac"),
                         'AS_IF([test "x$with_pcre" != xno],', 'AS_IF([false],')
+        if self.settings.os == 'Windows':
+            replace_in_file(self, os.path.join(self.source_folder, "configure.ac"),
+                        'ENABLE_CCACHE=1', 'ENABLE_CCACHE=0')
+            replace_in_file(self, os.path.join(self.source_folder, "Makefile.in"),
+                    "ENABLE_CCACHE = @ENABLE_CCACHE@", "")
+
 
     def build(self):
         self._patch_sources()
