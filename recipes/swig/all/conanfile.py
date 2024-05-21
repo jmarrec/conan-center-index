@@ -113,8 +113,9 @@ class SwigConan(ConanFile):
         # Rely on AutotoolsDeps instead of pcre2-config
         # https://github.com/swig/swig/blob/v4.1.1/configure.ac#L70-L92
         # https://github.com/swig/swig/blob/v4.0.2/configure.ac#L65-L86
+        # HAVE_PCRE=1 Needed or you get PCRE regex matching is not available in this SWIG build
         replace_in_file(self, os.path.join(self.source_folder, "configure.ac"),
-                        'AS_IF([test "x$with_pcre" != xno],', 'AS_IF([false],')
+                        'AS_IF([test "x$with_pcre" != xno],', 'AC_DEFINE([HAVE_PCRE], [1])\nAS_IF([false],')
         if self.settings.os == 'Windows':
             replace_in_file(self, os.path.join(self.source_folder, "configure.ac"),
                         'ENABLE_CCACHE=1', 'ENABLE_CCACHE=0')
