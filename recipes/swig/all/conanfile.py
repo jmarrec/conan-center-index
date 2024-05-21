@@ -2,11 +2,11 @@ import os
 
 from conan import ConanFile
 from conan.tools.apple import is_apple_os
-from conan.tools.env import VirtualBuildEnv
+from conan.tools.env import Environment, VirtualBuildEnv
 from conan.tools.files import apply_conandata_patches, chdir, copy, export_conandata_patches, get, rmdir, replace_in_file
 from conan.tools.gnu import Autotools, AutotoolsDeps, AutotoolsToolchain
 from conan.tools.layout import basic_layout
-from conan.tools.microsoft import is_msvc
+from conan.tools.microsoft import is_msvc, unix_path
 from conan.tools.scm import Version
 
 required_conan_version = ">=1.53.0"
@@ -84,12 +84,15 @@ class SwigConan(ConanFile):
             "--with-swiglibdir=${prefix}/bin/swiglib",
             f"--with-{pcre}-prefix={self.dependencies[pcre].package_folder}",
         ]
+        libs = []
         if self._use_pcre2:
-            env.define("PCRE2_LIBS", " ".join("-l" + lib for lib in self.dependencies["pcre2"].cpp_info.libs))
+            pcre2_8_libs = self.dependencies["pcre2"].cpp_info.components['pcre2-8'].libs
+            # env.define("PCRE2_LIBS", " ".join([f"-l{lib}" for lib in pcre2_8_libs]))
+            libs += pcre2_8_libs
 
         if self.settings.os in ["Linux", "FreeBSD"]:
-            tc.configure_args.append("LIBS=-ldl")
             tc.extra_defines.append("HAVE_UNISTD_H=1")
+            libs.append("dl")
         elif self.settings.os == "Windows":
             if is_msvc(self):
                 env.define("CC", "cccl -FS")
@@ -97,13 +100,51 @@ class SwigConan(ConanFile):
                 tc.configure_args.append("--disable-ccache")
             else:
                 tc.extra_ldflags.append("-static")
-                tc.configure_args.append("LIBS=-lmingwex -lssp")
+                libs += ["mingwex", "ssp"]
         elif is_apple_os(self):
             if self.settings.arch == "armv8":
                 # FIXME: Apple ARM should be handled by build helpers
                 tc.extra_cxxflags.append("-arch arm64")
                 tc.extra_ldflags.append("-arch arm64")
+
+        joined_libs = " ".join([f"-l{lib}" for lib in libs])
+        if not is_msvc(self):
+            tc.configure_args.append(f"LIBS={joined_libs}")
         tc.generate(env)
+
+        if is_msvc(self):
+            # Custom AutotoolsDeps for cl like compilers
+            # workaround for https://github.com/conan-io/conan/issues/12784
+            includedirs = []
+            defines = []
+            libs = []
+            libdirs = []
+            linkflags = []
+            cxxflags = []
+            cflags = []
+            for dependency in self.dependencies.values():
+                if 'pcre2' in str(dependency):
+                    deps_cpp_info = dependency.cpp_info.components['pcre2-8']
+                else:
+                    deps_cpp_info = dependency.cpp_info.aggregated_components()
+                includedirs.extend(deps_cpp_info.includedirs)
+                defines.extend(deps_cpp_info.defines)
+                libs.extend(deps_cpp_info.libs + deps_cpp_info.system_libs)
+                libdirs.extend(deps_cpp_info.libdirs)
+                linkflags.extend(deps_cpp_info.sharedlinkflags + deps_cpp_info.exelinkflags)
+                cxxflags.extend(deps_cpp_info.cxxflags)
+                cflags.extend(deps_cpp_info.cflags)
+
+            env = Environment()
+            env.append("CPPFLAGS", [f"-I{unix_path(self, p)}" for p in includedirs] + [f"-D{d}" for d in defines])
+            env.append("_LINK_", [lib if lib.endswith(".lib") else f"{lib}.lib" for lib in libs])
+            env.append("LDFLAGS", [f"-LIBPATH:{unix_path(self, p)}" for p in libdirs] + linkflags)
+            env.append("CXXFLAGS", cxxflags)
+            env.append("CFLAGS", cflags)
+            env.vars(self).save_script("conanautotoolsdeps_cl_workaround")
+        else:
+            deps = AutotoolsDeps(self)
+            deps.generate()
 
         deps = AutotoolsDeps(self)
         deps.generate()
@@ -114,13 +155,15 @@ class SwigConan(ConanFile):
         # https://github.com/swig/swig/blob/v4.1.1/configure.ac#L70-L92
         # https://github.com/swig/swig/blob/v4.0.2/configure.ac#L65-L86
         # HAVE_PCRE=1 Needed or you get PCRE regex matching is not available in this SWIG build
-        replace_in_file(self, os.path.join(self.source_folder, "configure.ac"),
-                        'AS_IF([test "x$with_pcre" != xno],', 'AC_DEFINE([HAVE_PCRE], [1])\nAS_IF([false],')
+        # /Users/julien/.conan2/p/b/pcre28e2874c775e7c/p/bin/pcre2-config --libs8
+        # => -L/Users/julien/.conan2/p/b/pcre28e2874c775e7c/p/lib -lpcre2-8
+        # replace_in_file(self, os.path.join(self.source_folder, "configure.ac"),
+        #                 'AS_IF([test "x$with_pcre" != xno],', 'AC_DEFINE([HAVE_PCRE], [1])\nAS_IF([false],')
         if self.settings.os == 'Windows':
             replace_in_file(self, os.path.join(self.source_folder, "configure.ac"),
-                        'ENABLE_CCACHE=1', 'ENABLE_CCACHE=0')
+                            'ENABLE_CCACHE=1', 'ENABLE_CCACHE=0')
             replace_in_file(self, os.path.join(self.source_folder, "Makefile.in"),
-                    "ENABLE_CCACHE = @ENABLE_CCACHE@", "")
+                            "ENABLE_CCACHE = @ENABLE_CCACHE@", "")
 
 
     def build(self):
